@@ -29,6 +29,7 @@ export interface SuratKeluar {
   content: string;
   tanggalDibuat: string;
   dibuatOleh: string;
+  fileUrl?: string;
 }
 
 export interface ArsipDokumen {
@@ -87,6 +88,7 @@ export interface ProgramKerja {
   status: 'Perencanaan' | 'Berjalan' | 'Selesai' | 'Tertunda';
   progress: number; // 0 to 100
   kegiatanTerbantu: string[]; // linked activity descriptions
+  fileUrl?: string;
 }
 
 export interface DokumentasiKegiatan {
@@ -143,6 +145,7 @@ export interface AgendaMusyawarah {
   notulensi: string;
   keputusanHasil: string;
   voting?: VotingMusyawarah;
+  fileUrl?: string;
 }
 
 export interface BeritaArtikel {

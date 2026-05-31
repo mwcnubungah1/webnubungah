@@ -14,7 +14,8 @@ import {
   ProgramKerja, 
   DokumentasiKegiatan, 
   LokasiGIS, 
-  AgendaMusyawarah 
+  AgendaMusyawarah,
+  BeritaArtikel 
 } from './types';
 import { 
   SEED_SURAT_MASUK, 
@@ -43,6 +44,7 @@ function AppContent() {
   const [dokumentasiList, setDokumentasiList] = useState<DokumentasiKegiatan[]>([]);
   const [lokasiList, setLokasiList] = useState<LokasiGIS[]>([]);
   const [agendaList, setAgendaList] = useState<AgendaMusyawarah[]>([]);
+  const [beritaList, setBeritaList] = useState<BeritaArtikel[]>([]);
 
   // Load from LocalStorage or seed if empty
   useEffect(() => {
@@ -55,6 +57,7 @@ function AppContent() {
     const docus = localStorage.getItem('mwc_dokumentasi');
     const locations = localStorage.getItem('mwc_lokasi_gis');
     const meetings = localStorage.getItem('mwc_agenda_musyawarah');
+    const berita = localStorage.getItem('mwc_berita');
     const storedRole = localStorage.getItem('mwc_user_role');
 
     setSuratMasuk(sMasuk ? JSON.parse(sMasuk) : SEED_SURAT_MASUK);
@@ -66,6 +69,7 @@ function AppContent() {
     setDokumentasiList(docus ? JSON.parse(docus) : SEED_DOKUMENTASI);
     setLokasiList(locations ? JSON.parse(locations) : SEED_LOKASI_GIS);
     setAgendaList(meetings ? JSON.parse(meetings) : SEED_AGENDAMUSYAWARAH);
+    setBeritaList(berita ? JSON.parse(berita) : SEED_BERITA);
     
     if (storedRole) {
       setRole(storedRole as UserRole);
@@ -146,11 +150,11 @@ function AppContent() {
     saveState('mwc_transaksi', update);
   };
 
-  const handleAddAnggota = (newItem: Omit<AnggotaPengurus, 'id' | 'fotoUrl'>) => {
+  const handleAddAnggota = (newItem: Omit<AnggotaPengurus, 'id'>) => {
     const item: AnggotaPengurus = { 
       ...newItem, 
       id: `MEMB-${Date.now()}`,
-      fotoUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80'
+      fotoUrl: newItem.fotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80'
     };
     const update = [item, ...anggotaList];
     setAnggotaList(update);
@@ -223,6 +227,23 @@ function AppContent() {
     saveState('mwc_agenda_musyawarah', update);
   };
 
+  const handleAddBerita = (newItem: Omit<BeritaArtikel, 'id' | 'bacaCount'>) => {
+    const item: BeritaArtikel = {
+      ...newItem,
+      id: `BRT-${Date.now()}`,
+      bacaCount: 0
+    };
+    const update = [item, ...beritaList];
+    setBeritaList(update);
+    saveState('mwc_berita', update);
+  };
+
+  const handleDeleteBerita = (id: string) => {
+    const update = beritaList.filter(b => b.id !== id);
+    setBeritaList(update);
+    saveState('mwc_berita', update);
+  };
+
   const handleLogout = () => {
     handleSetRole('PUBLIK_WARGA');
     navigate('/');
@@ -244,7 +265,7 @@ function AppContent() {
     dokumentasiList,
     lokasiList,
     agendaList,
-    beritaList: SEED_BERITA,
+    beritaList,
 
     // Mutation Event Callbacks
     onAddSuratMasuk: handleAddSuratMasuk,
@@ -263,7 +284,9 @@ function AppContent() {
     onAddDokumentasi: handleAddDokumentasi,
     onAddLokasi: handleAddLocation,
     onAddAgenda: handleAddAgenda,
-    onUpdateAgenda: handleUpdateAgenda
+    onUpdateAgenda: handleUpdateAgenda,
+    onAddBerita: handleAddBerita,
+    onDeleteBerita: handleDeleteBerita
   };
 
   const isPlainPage = pathname === '/login' || pathname.startsWith('/admin');

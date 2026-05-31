@@ -16,7 +16,8 @@ import {
   ChevronDown,
   UserCheck,
   ArrowLeft,
-  LifeBuoy
+  LifeBuoy,
+  BookOpen
 } from 'lucide-react';
 import { useRouter } from '../../router';
 import { 
@@ -29,7 +30,8 @@ import {
   ProgramKerja, 
   DokumentasiKegiatan, 
   LokasiGIS, 
-  AgendaMusyawarah 
+  AgendaMusyawarah,
+  BeritaArtikel
 } from '../../types';
 
 // Modular view imports
@@ -42,6 +44,7 @@ import ProgramKerjaView from '../../components/ProgramKerjaView';
 import DokumentasiView from '../../components/DokumentasiView';
 import MapGISView from '../../components/MapGISView';
 import MusyawarahView from '../../components/MusyawarahView';
+import BeritaAdminView from '../../components/BeritaAdminView';
 
 interface PageProps {
   userRole: UserRole;
@@ -57,6 +60,7 @@ interface PageProps {
   dokumentasiList: DokumentasiKegiatan[];
   lokasiList: LokasiGIS[];
   agendaList: AgendaMusyawarah[];
+  beritaList: BeritaArtikel[];
 
   // Setters wrap
   onAddSuratMasuk: (item: Omit<SuratMasuk, 'id'>) => void;
@@ -67,7 +71,7 @@ interface PageProps {
   onDeleteArsip: (id: string) => void;
   onAddTransaksi: (item: Omit<TransaksiKeuangan, 'id' | 'auditTrail'>) => void;
   onUpdateTransaksi: (id: string, updates: Partial<TransaksiKeuangan>) => void;
-  onAddAnggota: (item: Omit<AnggotaPengurus, 'id' | 'fotoUrl'>) => void;
+  onAddAnggota: (item: Omit<AnggotaPengurus, 'id'>) => void;
   onDeleteAnggota: (id: string) => void;
   onAddProgram: (item: Omit<ProgramKerja, 'id' | 'realisasiAnggaran' | 'kegiatanTerbantu'>) => void;
   onUpdateProgram: (id: string, updates: Partial<ProgramKerja>) => void;
@@ -75,6 +79,8 @@ interface PageProps {
   onAddLokasi: (item: Omit<LokasiGIS, 'id'>) => void;
   onAddAgenda: (item: Omit<AgendaMusyawarah, 'id' | 'absensi'>) => void;
   onUpdateAgenda: (id: string, updates: Partial<AgendaMusyawarah>) => void;
+  onAddBerita: (item: Omit<BeritaArtikel, 'id' | 'bacaCount'>) => void;
+  onDeleteBerita: (id: string) => void;
 }
 
 export default function AdminWorkspace(props: PageProps) {
@@ -112,6 +118,7 @@ export default function AdminWorkspace(props: PageProps) {
     { id: 'anggota', name: 'Database KARTANU', icon: Users, viewColors: 'text-indigo-700 bg-indigo-50' },
     { id: 'proker', name: 'Program Kerja & LPJ', icon: Briefcase, viewColors: 'text-teal-700 bg-teal-50' },
     { id: 'album', name: 'Dokumentasi Album', icon: Camera, viewColors: 'text-rose-700 bg-rose-50' },
+    { id: 'berita', name: 'Manajemen Berita', icon: BookOpen, viewColors: 'text-[#D4AF37] bg-emerald-900/10' },
     { id: 'gis', name: 'Map GIS Wakaf NU', icon: MapPin, viewColors: 'text-purple-700 bg-purple-50' },
     { id: 'musyawarah', name: 'Bahtsul Masail', icon: Vote, viewColors: 'text-orange-700 bg-orange-50' },
   ];
@@ -202,6 +209,15 @@ export default function AdminWorkspace(props: PageProps) {
             role={props.userRole}
             onAddAgenda={props.onAddAgenda}
             onUpdateAgenda={props.onUpdateAgenda}
+          />
+        );
+      case 'berita':
+        return (
+          <BeritaAdminView 
+            beritaList={props.beritaList}
+            role={props.userRole}
+            onAddBerita={props.onAddBerita}
+            onDeleteBerita={props.onDeleteBerita}
           />
         );
       default:

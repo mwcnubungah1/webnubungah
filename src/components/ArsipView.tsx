@@ -14,6 +14,7 @@ import {
   FileText
 } from 'lucide-react';
 import { ArsipDokumen, UserRole } from '../types';
+import CloudinaryUpload from './CloudinaryUpload';
 
 interface ArsipProps {
   arsipList: ArsipDokumen[];
@@ -42,6 +43,7 @@ export default function ArsipView({
   const [docSize, setDocSize] = useState('1.5 MB');
   const [docDesc, setDocDesc] = useState('');
   const [docPublic, setDocPublic] = useState(true);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState('');
 
   const categories: ArsipDokumen['kategori'][] = ['SK', 'AD/ART', 'SOP', 'Proposal', 'LPJ', 'Notulen', 'Surat', 'Lainnya'];
   const isAdminOrOfficer = role !== 'PUBLIK_WARGA';
@@ -84,7 +86,7 @@ export default function ArsipView({
       versi: docVersion || 'v1.0',
       fileSize: docSize || '2.1 MB',
       deskripsi: docDesc,
-      fileUrl: '#mock-file-view',
+      fileUrl: uploadedFileUrl || '#mock-file-view',
       publicAccess: docPublic
     });
 
@@ -96,6 +98,7 @@ export default function ArsipView({
     setDocSize('1.2 MB');
     setDocDesc('');
     setDocPublic(true);
+    setUploadedFileUrl('');
     setShowAddArsip(false);
   };
 
@@ -367,6 +370,14 @@ export default function ArsipView({
                   checked={docPublic}
                   onChange={(e) => setDocPublic(e.target.checked)}
                   className="h-4 w-4 bg-emerald-600 rounded text-emerald-600"
+                />
+              </div>
+
+              <div>
+                <CloudinaryUpload 
+                  label="Unggah Berkas Arsip Digital (Cloudinary)" 
+                  onUploadSuccess={(url) => setUploadedFileUrl(url)}
+                  defaultUrl={uploadedFileUrl}
                 />
               </div>
 

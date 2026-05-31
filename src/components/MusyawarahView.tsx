@@ -13,6 +13,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { AgendaMusyawarah, UserRole, VotingMusyawarah } from '../types';
+import CloudinaryUpload from './CloudinaryUpload';
 
 interface MusyawarahProps {
   agendaList: AgendaMusyawarah[];
@@ -41,6 +42,7 @@ export default function MusyawarahView({
   const [aWaktu, setAWaktu] = useState('19:30 WIB');
   const [aQuestion, setAQuestion] = useState('');
   const [aOptionsRaw, setAOptionsRaw] = useState('');
+  const [uploadedFileUrl, setUploadedFileUrl] = useState('');
 
   const isAdminOrOfficer = role !== 'PUBLIK_WARGA';
 
@@ -74,13 +76,15 @@ export default function MusyawarahView({
       status: 'Belum Mulai',
       notulensi: 'Agenda belum dimulai. Menunggu kesiapan moderator rapat.',
       keputusanHasil: 'Belum ada ketetapan.',
-      voting: votingObj
+      voting: votingObj,
+      fileUrl: uploadedFileUrl || undefined
     });
 
     // Reset Form
     setAJudul('');
     setAQuestion('');
     setAOptionsRaw('');
+    setUploadedFileUrl('');
     setShowAddAgenda(false);
   };
 
@@ -243,6 +247,19 @@ export default function MusyawarahView({
                     <span>Tanggal: <strong>{selectedAgenda.tanggal}</strong></span>
                     <span>Waktu Mulai: <strong>{selectedAgenda.waktu}</strong></span>
                   </div>
+                  {selectedAgenda.fileUrl && (
+                    <div className="pt-2">
+                      <a 
+                        href={selectedAgenda.fileUrl} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="inline-flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-805 border border-indigo-150 rounded-xl px-3 py-1.5 text-xxs font-bold cursor-pointer transition-colors"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>Unduh Dokumen Bahtsul Masail / Makalah Rapat (Cloudinary)</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2">
@@ -571,6 +588,14 @@ export default function MusyawarahView({
                     className="w-full p-2 bg-white rounded-xl border border-gray-200 outline-none placeholder:text-gray-300"
                   />
                 </div>
+              </div>
+
+              <div>
+                <CloudinaryUpload 
+                  label="Unggah Makalah / Kitab / Referensi Pembahasan (Cloudinary)" 
+                  onUploadSuccess={(url) => setUploadedFileUrl(url)}
+                  defaultUrl={uploadedFileUrl}
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t">

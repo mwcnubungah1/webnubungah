@@ -14,6 +14,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { TransaksiKeuangan, UserRole } from '../types';
+import CloudinaryUpload from './CloudinaryUpload';
 
 interface KeuanganProps {
   transaksiList: TransaksiKeuangan[];
@@ -39,6 +40,7 @@ export default function KeuanganView({
   const [txDeskripsi, setTxDeskripsi] = useState('');
   const [txJumlah, setTxJumlah] = useState<number>(0);
   const [txTanggal, setTxTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [uploadedBuktiUrl, setUploadedBuktiUrl] = useState('');
 
   const isAdminOrPresident = role === 'ADMIN_MWCNU' || role === 'KETUA';
   const isOfficer = role === 'SEKRETARIS' || role === 'ADMIN_MWCNU';
@@ -76,12 +78,13 @@ export default function KeuanganView({
       deskripsi: txDeskripsi,
       jumlah: txJumlah,
       status: initialStatus,
-      buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=120&auto=format&fit=crop&q=60'
+      buktiUrl: uploadedBuktiUrl || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=120&auto=format&fit=crop&q=60'
     });
 
     // Reset
     setTxDeskripsi('');
     setTxJumlah(0);
+    setUploadedBuktiUrl('');
     setShowAddTx(false);
   };
 
@@ -487,6 +490,14 @@ export default function KeuanganView({
                 <span className="text-[10px] text-indigo-900 block leading-normal font-sans">
                   <strong>* Alur Verifikasi Transparansi:</strong> Transaksi yang dicatat akan berstatus <strong>Pending</strong> terlebih dahulu dan membutuhkan tinjauan serta persetujuan digital di dashboard Ketua Tanfidziyah untuk sah dicantumkan dalam Buku Kas Umum.
                 </span>
+              </div>
+
+              <div>
+                <CloudinaryUpload 
+                  label="Unggah Bukti Kuitansi / Resi Transfer (Cloudinary)" 
+                  onUploadSuccess={(url) => setUploadedBuktiUrl(url)}
+                  defaultUrl={uploadedBuktiUrl}
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t text-xs">

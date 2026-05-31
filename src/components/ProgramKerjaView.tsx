@@ -12,6 +12,7 @@ import {
   CircleDollarSign
 } from 'lucide-react';
 import { ProgramKerja, UserRole } from '../types';
+import CloudinaryUpload from './CloudinaryUpload';
 
 interface ProgerProps {
   programList: ProgramKerja[];
@@ -37,6 +38,7 @@ export default function ProgramKerjaView({
   const [pTarget, setPTarget] = useState('');
   const [pMulai, setPMulai] = useState(new Date().toISOString().split('T')[0]);
   const [pSelesai, setPSelesai] = useState('');
+  const [uploadedFileUrl, setUploadedFileUrl] = useState('');
 
   const isAdminOrOfficer = role !== 'PUBLIK_WARGA';
 
@@ -71,7 +73,8 @@ export default function ProgramKerjaView({
       timelineMulai: pMulai,
       timelineSelesai: pSelesai || new Date().toISOString().split('T')[0],
       status: 'Perencanaan',
-      progress: 0
+      progress: 0,
+      fileUrl: uploadedFileUrl || undefined
     });
 
     // Reset
@@ -80,6 +83,7 @@ export default function ProgramKerjaView({
     setPAnggaran(0);
     setPTarget('');
     setPSelesai('');
+    setUploadedFileUrl('');
     setShowAddProgram(false);
   };
 
@@ -242,6 +246,19 @@ export default function ProgramKerjaView({
                     <span className="font-extrabold text-emerald-805 block">Target Milestones:</span>
                     <p className="text-gray-600">{prog.target}</p>
                   </div>
+
+                  {prog.fileUrl && (
+                    <div className="pt-1">
+                      <a 
+                        href={prog.fileUrl} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="w-full text-center block bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-100 rounded-xl py-2 text-xxs font-bold cursor-pointer"
+                      >
+                        Unduh Berkas Proposal / LPJ (Cloudinary)
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-gray-100 pt-3 mt-4 flex items-center justify-between text-xxs text-gray-400 font-sans">
@@ -350,6 +367,14 @@ export default function ProgramKerjaView({
                   value={pTarget}
                   onChange={(e) => setPTarget(e.target.value)}
                   className="w-full p-2 rounded-xl border border-gray-200 outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div>
+                <CloudinaryUpload 
+                  label="Unggah Dokumen Proposal / LPJ Laporan (Cloudinary)" 
+                  onUploadSuccess={(url) => setUploadedFileUrl(url)}
+                  defaultUrl={uploadedFileUrl}
                 />
               </div>
 

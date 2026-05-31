@@ -16,6 +16,7 @@ import {
   Map
 } from 'lucide-react';
 import { AnggotaPengurus, UserRole } from '../types';
+import CloudinaryUpload from './CloudinaryUpload';
 
 interface AnggotaProps {
   anggotaList: AnggotaPengurus[];
@@ -47,6 +48,7 @@ export default function DatabaseAnggotaView({
   const [mStruktur, setMStruktur] = useState<AnggotaPengurus['struktur']>('Pengurus Harian');
   const [mRantingId, setMRantingId] = useState('R-01');
   const [mKeahlianRaw, setMKeahlianRaw] = useState('');
+  const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState('');
 
   const isAdminOrOfficer = role !== 'PUBLIK_WARGA';
 
@@ -147,7 +149,7 @@ export default function DatabaseAnggotaView({
       rantingId: mRantingId,
       riwayatJabatan: ['Kader Baru Terdaftar (2026)'],
       keahlian: mKeahlianRaw ? mKeahlianRaw.split(',').map(s => s.trim()) : ['Umum', 'Keagamaan'],
-      fotoUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&crop=face&q=80'
+      fotoUrl: uploadedPhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&crop=face&q=80'
     });
 
     // Reset Form
@@ -155,6 +157,7 @@ export default function DatabaseAnggotaView({
     setMNik('');
     setMJabatan('');
     setMAlamat('');
+    setUploadedPhotoUrl('');
     setShowAddMember(false);
   };
 
@@ -539,6 +542,15 @@ export default function DatabaseAnggotaView({
                   value={mKeahlianRaw}
                   onChange={(e) => setMKeahlianRaw(e.target.value)}
                   className="w-full p-2 rounded-xl border border-gray-200 outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div>
+                <CloudinaryUpload 
+                  label="Unggah Pasfoto Resmi Pengurus / Kader (Cloudinary)" 
+                  onUploadSuccess={(url) => setUploadedPhotoUrl(url)}
+                  defaultUrl={uploadedPhotoUrl}
+                  accept="image/*"
                 />
               </div>
 

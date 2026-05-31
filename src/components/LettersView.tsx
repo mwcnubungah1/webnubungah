@@ -15,6 +15,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { SuratMasuk, SuratKeluar, UserRole } from '../types';
+import CloudinaryUpload from './CloudinaryUpload';
 
 interface LettersProps {
   suratMasukList: SuratMasuk[];
@@ -49,6 +50,7 @@ export default function LettersView({
   const [perihalMasuk, setPerihalMasuk] = useState('');
   const [tglMasuk, setTglMasuk] = useState('');
   const [lampiranMasuk, setLampiranMasuk] = useState('1 Berkas');
+  const [uploadedMasukFileUrl, setUploadedMasukFileUrl] = useState('');
 
   // Form states - Surat Keluar
   const [penerimaKeluar, setPenerimaKeluar] = useState('');
@@ -56,6 +58,7 @@ export default function LettersView({
   const [lampiranKeluar, setLampiranKeluar] = useState('- ');
   const [kontenKeluar, setKontenKeluar] = useState('');
   const [klasifikasiKeluar, setKlasifikasiKeluar] = useState<'A.I' | 'A.G' | 'B.I'>('A.I');
+  const [uploadedKeluarFileUrl, setUploadedKeluarFileUrl] = useState('');
 
   // Disposisi states
   const [disposisiId, setDisposisiId] = useState<string | null>(null);
@@ -75,7 +78,7 @@ export default function LettersView({
       tanggal: tglMasuk,
       lampiran: lampiranMasuk,
       statusDisposisi: 'Belum Disposisi',
-      fileUrl: '/images/empty_invoice.png'
+      fileUrl: uploadedMasukFileUrl || '/images/empty_invoice.png'
     });
     // Reset
     setNoSuratMasuk('');
@@ -83,6 +86,7 @@ export default function LettersView({
     setPerihalMasuk('');
     setTglMasuk('');
     setLampiranMasuk('1 Berkas');
+    setUploadedMasukFileUrl('');
     setShowAddMasuk(false);
   };
 
@@ -107,7 +111,8 @@ export default function LettersView({
       lampiran: lampiranKeluar,
       status: 'Draft',
       content: kontenKeluar,
-      dibuatOleh: role === 'ADMIN_MWCNU' ? 'Admin Utama' : role === 'SEKRETARIS' ? 'Sekretaris' : 'Ketua Tanfidziyah'
+      dibuatOleh: role === 'ADMIN_MWCNU' ? 'Admin Utama' : role === 'SEKRETARIS' ? 'Sekretaris' : 'Ketua Tanfidziyah',
+      fileUrl: uploadedKeluarFileUrl || undefined
     });
 
     // Reset
@@ -115,6 +120,7 @@ export default function LettersView({
     setPerihalKeluar('');
     setLampiranKeluar('- ');
     setKontenKeluar('');
+    setUploadedKeluarFileUrl('');
     setShowAddKeluar(false);
   };
 
@@ -364,6 +370,17 @@ export default function LettersView({
                                 </button>
                               )}
 
+                              {item.fileUrl && (
+                                <a
+                                  href={item.fileUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-[10px] px-2.5 py-1 rounded inline-flex items-center gap-1 font-bold cursor-pointer border border-indigo-100"
+                                >
+                                  Unduh Lampiran
+                                </a>
+                              )}
+
                               <button
                                 onClick={() => setPreviewLetter(item)}
                                 className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] px-2 py-1 rounded inline-flex items-center gap-1 cursor-pointer font-bold"
@@ -474,6 +491,14 @@ export default function LettersView({
                 </div>
               </div>
 
+              <div>
+                <CloudinaryUpload 
+                  label="Scan Berkas Fisik Surat Masuk (Cloudinary)" 
+                  onUploadSuccess={(url) => setUploadedMasukFileUrl(url)} 
+                  defaultUrl={uploadedMasukFileUrl}
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-4">
                 <button
                   type="button"
@@ -569,6 +594,14 @@ export default function LettersView({
                   value={kontenKeluar}
                   onChange={(e) => setKontenKeluar(e.target.value)}
                   className="w-full p-2 rounded-xl border border-gray-200 outline-none focus:border-emerald-600 font-sans"
+                />
+              </div>
+
+              <div>
+                <CloudinaryUpload 
+                  label="Unggah Lampiran Berkas / Surat Pelengkap (Cloudinary)" 
+                  onUploadSuccess={(url) => setUploadedKeluarFileUrl(url)}
+                  defaultUrl={uploadedKeluarFileUrl}
                 />
               </div>
 

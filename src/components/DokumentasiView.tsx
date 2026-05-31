@@ -12,6 +12,7 @@ import {
   Grid
 } from 'lucide-react';
 import { DokumentasiKegiatan, ProgramKerja, AnggotaPengurus, UserRole } from '../types';
+import CloudinaryUpload from './CloudinaryUpload';
 
 interface DokuProps {
   dokumentasiList: DokumentasiKegiatan[];
@@ -41,6 +42,7 @@ export default function DokumentasiView({
   const [dLokasi, setDLokasi] = useState('');
   const [dPengurusInvolved, setDPengurusInvolved] = useState<string[]>([]);
   const [dCoverUrl, setDCoverUrl] = useState('');
+  const [uploadedCoverUrl, setUploadedCoverUrl] = useState('');
 
   const isAdminOrOfficer = role !== 'PUBLIK_WARGA';
 
@@ -60,7 +62,7 @@ export default function DokumentasiView({
     if (!dJudul || !dDeskripsi || !dLokasi) return;
 
     // Use default beautiful Unsplash image if none provided
-    const cover = dCoverUrl || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1000&auto=format&fit=crop&q=80';
+    const cover = uploadedCoverUrl || dCoverUrl || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1000&auto=format&fit=crop&q=80';
 
     onAddDokumentasi({
       judul: dJudul,
@@ -79,6 +81,7 @@ export default function DokumentasiView({
     setDLokasi('');
     setDPengurusInvolved([]);
     setDCoverUrl('');
+    setUploadedCoverUrl('');
     setShowAddDoku(false);
   };
 
@@ -330,6 +333,15 @@ export default function DokumentasiView({
                   value={dPengurusInvolved.join(', ')}
                   onChange={(e) => setDPengurusInvolved(e.target.value.split(',').map(s => s.trim()))}
                   className="w-full p-2 rounded-xl border border-gray-200 outline-none"
+                />
+              </div>
+
+              <div>
+                <CloudinaryUpload 
+                  label="Unggah Foto Kegitan Utama (Cloudinary)" 
+                  onUploadSuccess={(url) => setUploadedCoverUrl(url)}
+                  defaultUrl={uploadedCoverUrl}
+                  accept="image/*"
                 />
               </div>
 
