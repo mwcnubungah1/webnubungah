@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from '../router';
 import { UserRole } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface PageProps {
   userRole: UserRole;
@@ -28,40 +29,77 @@ export default function Login({ userRole, onLogin, onLogout }: PageProps) {
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMsg('');
 
-    setTimeout(() => {
-      const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
 
-      if (normalizedEmail === 'maghfurmunif@gmail.com') {
-        if (password === 'admin123') {
-          onLogin('ADMIN_MWCNU');
-          navigate('/admin');
-        } else {
-          setErrorMsg('Kata sandi untuk Administrator Utama salah.');
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password: password
+        });
+
+        if (error) {
+          setErrorMsg(`Gagal Masuk: ${error.message === 'Invalid login credentials' ? 'Email atau kata sandi tidak valid.' : error.message}`);
+          setIsSubmitting(false);
+          return;
         }
-      } else if (normalizedEmail === 'sekretaris@mwcnu.or.id') {
-        if (password === 'sekretaris123') {
-          onLogin('SEKRETARIS');
+
+        if (data?.user) {
+          const userEmail = data.user.email;
+          const userUid = data.user.id;
+
+          // Check if maghfurmunif@gmail.com with UID bec40ceb-b514-43e7-8428-04c742bbef5b or general match
+          if (userEmail === 'maghfurmunif@gmail.com' || userUid === 'bec40ceb-b514-43e7-8428-04c742bbef5b') {
+            onLogin('ADMIN_MWCNU');
+          } else if (userEmail === 'sekretaris@mwcnu.or.id') {
+            onLogin('SEKRETARIS');
+          } else if (userEmail === 'ketua@mwcnu.or.id') {
+            onLogin('KETUA');
+          } else {
+            onLogin('ADMIN_MWCNU');
+          }
           navigate('/admin');
-        } else {
-          setErrorMsg('Kata sandi untuk Sekretaris Tanfidziyah salah.');
         }
-      } else if (normalizedEmail === 'ketua@mwcnu.or.id') {
-        if (password === 'ketua123') {
-          onLogin('KETUA');
-          navigate('/admin');
-        } else {
-          setErrorMsg('Kata sandi untuk Ketua Tanfidziyah salah.');
-        }
-      } else {
-        setErrorMsg('Alamat Email tidak terdaftar atau kata sandi Anda salah.');
+      } catch (err: any) {
+        setErrorMsg(`Terjadi kesalahan sistem: ${err.message || err}`);
+      } finally {
+        setIsSubmitting(false);
       }
-      setIsSubmitting(false);
-    }, 600);
+    } else {
+      // Fallback local mock system when Supabase is not configured yet (e.g. initial development)
+      setTimeout(() => {
+        if (normalizedEmail === 'maghfurmunif@gmail.com') {
+          if (password === 'admin123') {
+            onLogin('ADMIN_MWCNU');
+            navigate('/admin');
+          } else {
+            setErrorMsg('Kata sandi untuk Administrator Utama salah.');
+          }
+        } else if (normalizedEmail === 'sekretaris@mwcnu.or.id') {
+          if (password === 'sekretaris123') {
+            onLogin('SEKRETARIS');
+            navigate('/admin');
+          } else {
+            setErrorMsg('Kata sandi untuk Sekretaris Tanfidziyah salah.');
+          }
+        } else if (normalizedEmail === 'ketua@mwcnu.or.id') {
+          if (password === 'ketua123') {
+            onLogin('KETUA');
+            navigate('/admin');
+          } else {
+            setErrorMsg('Kata sandi untuk Ketua Tanfidziyah salah.');
+          }
+        } else {
+          setErrorMsg('Alamat Email tidak terdaftar atau kata sandi Anda salah.');
+        }
+        setIsSubmitting(false);
+      }, 600);
+    }
   };
 
   return (
@@ -93,6 +131,12 @@ export default function Login({ userRole, onLogin, onLogout }: PageProps) {
           {errorMsg && (
             <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-xl text-3xs font-medium leading-relaxed">
               {errorMsg}
+            </div>
+          )}
+
+          {!isSupabaseConfigured && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-850 p-3 rounded-xl text-[10px] leading-relaxed">
+              Peringatan: Koneksi database Supabase belum aktif. Masuk menggunakan mode demo luring (offline) diizinkan selama pengembangan.
             </div>
           )}
 
@@ -138,19 +182,6 @@ export default function Login({ userRole, onLogin, onLogout }: PageProps) {
             <ArrowRight className="h-4 w-4" />
           </button>
         </form>
-
-        {/* Sandbox Instruction credentials helper box */}
-        <div className="bg-slate-50 p-4 rounded-2xl border text-left space-y-2">
-          <h4 className="text-3xs font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-            <Info className="h-3.5 w-3.5 text-emerald-800" />
-            <span>Kredensial Peninjauan (Guna Evaluasi):</span>
-          </h4>
-          <div className="text-4xs text-gray-550 space-y-1.5 font-mono leading-relaxed">
-            <p>&bull; <b>Administrator (maghfurmunif@gmail.com):</b><br />Email: <code className="font-bold text-emerald-800 bg-emerald-50 px-1 rounded">maghfurmunif@gmail.com</code> | Sandi: <code className="font-bold text-emerald-800 bg-emerald-50 px-1 rounded">admin123</code></p>
-            <p>&bull; <b>Sekretaris Tanfidziyah:</b><br />Email: <code className="font-bold text-emerald-800 bg-emerald-50 px-1 rounded">sekretaris@mwcnu.or.id</code> | Sandi: <code className="font-bold text-emerald-800 bg-emerald-50 px-1 rounded">sekretaris123</code></p>
-            <p>&bull; <b>Ketua Tanfidziyah:</b><br />Email: <code className="font-bold text-emerald-800 bg-emerald-50 px-1 rounded">ketua@mwcnu.or.id</code> | Sandi: <code className="font-bold text-emerald-800 bg-emerald-50 px-1 rounded">ketua123</code></p>
-          </div>
-        </div>
 
       </div>
     </div>

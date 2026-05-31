@@ -86,47 +86,41 @@ export function buildRoutes(): RoutePattern[] {
 export function RouterProvider({ children }: { children: React.ReactNode }) {
   const [routes] = useState<RoutePattern[]>(buildRoutes);
   
-  // Get route path from hash, e.g. URL.com/#/profil -> `/profil`
-  const getHashPath = () => {
-    let hash = window.location.hash;
-    if (!hash) return '/';
-    // Remove leader '#'
-    hash = hash.slice(1);
-    // Ensure leading slash
-    if (!hash.startsWith('/')) {
-      hash = '/' + hash;
-    }
+  // Get route path from window.location.pathname
+  const getPath = () => {
+    let path = window.location.pathname;
+    if (!path) return '/';
     // Remove query params if any
-    const queryIdx = hash.indexOf('?');
+    const queryIdx = path.indexOf('?');
     if (queryIdx !== -1) {
-      hash = hash.substring(0, queryIdx);
+      path = path.substring(0, queryIdx);
     }
-    return hash || '/';
+    return path || '/';
   };
 
-  const [pathname, setPathname] = useState<string>(getHashPath);
+  const [pathname, setPathname] = useState<string>(getPath);
 
   useEffect(() => {
-    const handleHashChange = () => {
-      setPathname(getHashPath());
+    const handlePopState = () => {
+      setPathname(getPath());
     };
 
-    window.addEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handlePopState);
     // Set initially
-    handleHashChange();
+    handlePopState();
 
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('popstate', handlePopState);
     };
   }, []);
 
   const navigate = (path: string) => {
-    // Format path nicely to hash
-    let targetHash = path;
-    if (!targetHash.startsWith('/')) {
-      targetHash = '/' + targetHash;
+    let targetPath = path;
+    if (!targetPath.startsWith('/')) {
+      targetPath = '/' + targetPath;
     }
-    window.location.hash = targetHash;
+    window.history.pushState({}, '', targetPath);
+    setPathname(targetPath);
   };
 
   // Match the route and extract parameters
@@ -191,7 +185,7 @@ export function Link({
 
   return (
     <a 
-      href={`#${to}`} 
+      href={`${to}`} 
       onClick={handleClick} 
       className={`${className} ${isActive ? activeClassName : ''}`}
     >
@@ -201,7 +195,7 @@ export function Link({
 }
 
 export function RouteRenderer({ pageProps }: { pageProps: any }) {
-  const { pathname, routes } = useRouter();
+  const { pathname, routes, navigate } = useRouter();
   
   // Clean paths
   let currentCleanPath = pathname;
@@ -218,8 +212,8 @@ export function RouteRenderer({ pageProps }: { pageProps: any }) {
         <h1 className="text-4xl font-serif font-black text-emerald-900 mb-2">404</h1>
         <p className="text-sm text-gray-500 mb-6">Halaman tidak ditemukan di sistem MWCNU.</p>
         <button 
-          onClick={() => window.location.hash = '#/'} 
-          className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs px-5 py-2 rounded-xl shadow-xs transition"
+          onClick={() => navigate('/')} 
+          className="bg-emerald-700 hover:bg-emerald-805 text-white font-semibold text-xs px-5 py-2 rounded-xl shadow-xs transition cursor-pointer"
         >
           Kembali ke Beranda
         </button>
