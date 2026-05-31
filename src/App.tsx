@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RouterProvider, RouteRenderer, useRouter } from './router';
 import PublicLayout from './components/PublicLayout';
+import { isSupabaseConfigured, supabase, supabaseFetchAll, supabaseUpsert, supabaseDelete } from './lib/supabase';
 
 // Types and Seed Data
 import { 
@@ -46,37 +47,85 @@ function AppContent() {
   const [agendaList, setAgendaList] = useState<AgendaMusyawarah[]>([]);
   const [beritaList, setBeritaList] = useState<BeritaArtikel[]>([]);
 
-  // Load from LocalStorage or seed if empty
+  // Load from Supabase (if configured) or fallback to LocalStorage/Seeds
   useEffect(() => {
-    const sMasuk = localStorage.getItem('mwc_surat_masuk');
-    const sKeluar = localStorage.getItem('mwc_surat_keluar');
-    const aDocs = localStorage.getItem('mwc_arsip_docs');
-    const txs = localStorage.getItem('mwc_transaksi');
-    const members = localStorage.getItem('mwc_anggota');
-    const progs = localStorage.getItem('mwc_program_kerja');
-    const docus = localStorage.getItem('mwc_dokumentasi');
-    const locations = localStorage.getItem('mwc_lokasi_gis');
-    const meetings = localStorage.getItem('mwc_agenda_musyawarah');
-    const berita = localStorage.getItem('mwc_berita');
-    const storedRole = localStorage.getItem('mwc_user_role');
+    async function loadAllData() {
+      const sMasuk = localStorage.getItem('mwc_surat_masuk');
+      const sKeluar = localStorage.getItem('mwc_surat_keluar');
+      const aDocs = localStorage.getItem('mwc_arsip_docs');
+      const txs = localStorage.getItem('mwc_transaksi');
+      const members = localStorage.getItem('mwc_anggota');
+      const progs = localStorage.getItem('mwc_program_kerja');
+      const docus = localStorage.getItem('mwc_dokumentasi');
+      const locations = localStorage.getItem('mwc_lokasi_gis');
+      const meetings = localStorage.getItem('mwc_agenda_musyawarah');
+      const berita = localStorage.getItem('mwc_berita');
+      const storedRole = localStorage.getItem('mwc_user_role');
 
-    setSuratMasuk(sMasuk ? JSON.parse(sMasuk) : SEED_SURAT_MASUK);
-    setSuratKeluar(sKeluar ? JSON.parse(sKeluar) : SEED_SURAT_KELUAR);
-    setArsipDocs(aDocs ? JSON.parse(aDocs) : SEED_ARSIP_DOKUMEN);
-    setTransaksiList(txs ? JSON.parse(txs) : SEED_TRANSAKSI_KEUANGAN);
-    setAnggotaList(members ? JSON.parse(members) : SEED_ANGGOTA_PENGURUS);
-    setProgramList(progs ? JSON.parse(progs) : SEED_PROGRAM_KERJA);
-    setDokumentasiList(docus ? JSON.parse(docus) : SEED_DOKUMENTASI);
-    setLokasiList(locations ? JSON.parse(locations) : SEED_LOKASI_GIS);
-    setAgendaList(meetings ? JSON.parse(meetings) : SEED_AGENDAMUSYAWARAH);
-    setBeritaList(berita ? JSON.parse(berita) : SEED_BERITA);
-    
-    if (storedRole) {
-      setRole(storedRole as UserRole);
-    } else {
-      // Default as public so they see the public-facing landing page first
-      setRole('PUBLIK_WARGA');
+      // Initialize with caches or standard seeds
+      let sm = sMasuk ? JSON.parse(sMasuk) : SEED_SURAT_MASUK;
+      let sk = sKeluar ? JSON.parse(sKeluar) : SEED_SURAT_KELUAR;
+      let ad = aDocs ? JSON.parse(aDocs) : SEED_ARSIP_DOKUMEN;
+      let tx = txs ? JSON.parse(txs) : SEED_TRANSAKSI_KEUANGAN;
+      let members_list = members ? JSON.parse(members) : SEED_ANGGOTA_PENGURUS;
+      let pk = progs ? JSON.parse(progs) : SEED_PROGRAM_KERJA;
+      let dk = docus ? JSON.parse(docus) : SEED_DOKUMENTASI;
+      let lg = locations ? JSON.parse(locations) : SEED_LOKASI_GIS;
+      let am = meetings ? JSON.parse(meetings) : SEED_AGENDAMUSYAWARAH;
+      let ba = berita ? JSON.parse(berita) : SEED_BERITA;
+
+      if (isSupabaseConfigured && supabase) {
+        console.log("Supabase is configured. Syncing tables in background...");
+        try {
+          const [dbSM, dbSK, dbAD, dbTX, dbAP, dbPRG, dbDOC, dbLOC, dbAG, dbBRT] = await Promise.all([
+            supabaseFetchAll('surat_masuk'),
+            supabaseFetchAll('surat_keluar'),
+            supabaseFetchAll('arsip_dokumen'),
+            supabaseFetchAll('transaksi_keuangan'),
+            supabaseFetchAll('anggota_pengurus'),
+            supabaseFetchAll('program_kerja'),
+            supabaseFetchAll('dokumentasi_kegiatan'),
+            supabaseFetchAll('lokasi_gis'),
+            supabaseFetchAll('agenda_musyawarah'),
+            supabaseFetchAll('berita_artikel')
+          ]);
+
+          if (dbSM !== null) { sm = dbSM; saveState('mwc_surat_masuk', dbSM); }
+          if (dbSK !== null) { sk = dbSK; saveState('mwc_surat_keluar', dbSK); }
+          if (dbAD !== null) { ad = dbAD; saveState('mwc_arsip_docs', dbAD); }
+          if (dbTX !== null) { tx = dbTX; saveState('mwc_transaksi', dbTX); }
+          if (dbAP !== null) { members_list = dbAP; saveState('mwc_anggota', dbAP); }
+          if (dbPRG !== null) { pk = dbPRG; saveState('mwc_program_kerja', dbPRG); }
+          if (dbDOC !== null) { dk = dbDOC; saveState('mwc_dokumentasi', dbDOC); }
+          if (dbLOC !== null) { lg = dbLOC; saveState('mwc_lokasi_gis', dbLOC); }
+          if (dbAG !== null) { am = dbAG; saveState('mwc_agenda_musyawarah', dbAG); }
+          if (dbBRT !== null) { ba = dbBRT; saveState('mwc_berita', dbBRT); }
+          
+          console.log("Data loaded and synced successfully with Supabase!");
+        } catch (err) {
+          console.warn("Could not fetch remote table records. Standard fallback assets will load:", err);
+        }
+      }
+
+      setSuratMasuk(sm);
+      setSuratKeluar(sk);
+      setArsipDocs(ad);
+      setTransaksiList(tx);
+      setAnggotaList(members_list);
+      setProgramList(pk);
+      setDokumentasiList(dk);
+      setLokasiList(lg);
+      setAgendaList(am);
+      setBeritaList(ba);
+
+      if (storedRole) {
+        setRole(storedRole as UserRole);
+      } else {
+        setRole('PUBLIK_WARGA');
+      }
     }
+
+    loadAllData();
   }, []);
 
   // Save to LocalStorage helpers upon trigger changes
@@ -95,10 +144,18 @@ function AppContent() {
     const update = [item, ...suratMasuk];
     setSuratMasuk(update);
     saveState('mwc_surat_masuk', update);
+    supabaseUpsert('surat_masuk', item);
   };
 
   const handleUpdateSuratMasuk = (id: string, updates: Partial<SuratMasuk>) => {
-    const update = suratMasuk.map(s => s.id === id ? { ...s, ...updates } : s);
+    const update = suratMasuk.map(s => {
+      if (s.id === id) {
+        const updated = { ...s, ...updates };
+        supabaseUpsert('surat_masuk', updated);
+        return updated;
+      }
+      return s;
+    });
     setSuratMasuk(update);
     saveState('mwc_surat_masuk', update);
   };
@@ -112,10 +169,18 @@ function AppContent() {
     const update = [item, ...suratKeluar];
     setSuratKeluar(update);
     saveState('mwc_surat_keluar', update);
+    supabaseUpsert('surat_keluar', item);
   };
 
   const handleUpdateSuratKeluar = (id: string, updates: Partial<SuratKeluar>) => {
-    const update = suratKeluar.map(s => s.id === id ? { ...s, ...updates } : s);
+    const update = suratKeluar.map(s => {
+      if (s.id === id) {
+        const updated = { ...s, ...updates };
+        supabaseUpsert('surat_keluar', updated);
+        return updated;
+      }
+      return s;
+    });
     setSuratKeluar(update);
     saveState('mwc_surat_keluar', update);
   };
@@ -125,12 +190,14 @@ function AppContent() {
     const update = [item, ...arsipDocs];
     setArsipDocs(update);
     saveState('mwc_arsip_docs', update);
+    supabaseUpsert('arsip_dokumen', item);
   };
 
   const handleDeleteArsip = (id: string) => {
     const update = arsipDocs.filter(a => a.id !== id);
     setArsipDocs(update);
     saveState('mwc_arsip_docs', update);
+    supabaseDelete('arsip_dokumen', id);
   };
 
   const handleAddTransaksi = (newItem: Omit<TransaksiKeuangan, 'id' | 'auditTrail'>) => {
@@ -142,10 +209,18 @@ function AppContent() {
     const update = [item, ...transaksiList];
     setTransaksiList(update);
     saveState('mwc_transaksi', update);
+    supabaseUpsert('transaksi_keuangan', item);
   };
 
   const handleUpdateTransaksi = (id: string, updates: Partial<TransaksiKeuangan>) => {
-    const update = transaksiList.map(t => t.id === id ? { ...t, ...updates } : t);
+    const update = transaksiList.map(t => {
+      if (t.id === id) {
+        const updated = { ...t, ...updates };
+        supabaseUpsert('transaksi_keuangan', updated);
+        return updated;
+      }
+      return t;
+    });
     setTransaksiList(update);
     saveState('mwc_transaksi', update);
   };
@@ -159,10 +234,18 @@ function AppContent() {
     const update = [item, ...anggotaList];
     setAnggotaList(update);
     saveState('mwc_anggota', update);
+    supabaseUpsert('anggota_pengurus', item);
   };
 
   const handleUpdateAnggota = (id: string, updates: Partial<AnggotaPengurus>) => {
-    const update = anggotaList.map(a => a.id === id ? { ...a, ...updates } : a);
+    const update = anggotaList.map(a => {
+      if (a.id === id) {
+        const updated = { ...a, ...updates };
+        supabaseUpsert('anggota_pengurus', updated);
+        return updated;
+      }
+      return a;
+    });
     setAnggotaList(update);
     saveState('mwc_anggota', update);
   };
@@ -171,6 +254,7 @@ function AppContent() {
     const update = anggotaList.filter(a => a.id !== id);
     setAnggotaList(update);
     saveState('mwc_anggota', update);
+    supabaseDelete('anggota_pengurus', id);
   };
 
   const handleAddProgram = (newItem: Omit<ProgramKerja, 'id' | 'realisasiAnggaran' | 'kegiatanTerbantu'>) => {
@@ -183,10 +267,18 @@ function AppContent() {
     const update = [item, ...programList];
     setProgramList(update);
     saveState('mwc_program_kerja', update);
+    supabaseUpsert('program_kerja', item);
   };
 
   const handleUpdateProgram = (id: string, updates: Partial<ProgramKerja>) => {
-    const update = programList.map(p => p.id === id ? { ...p, ...updates } : p);
+    const update = programList.map(p => {
+      if (p.id === id) {
+        const updated = { ...p, ...updates };
+        supabaseUpsert('program_kerja', updated);
+        return updated;
+      }
+      return p;
+    });
     setProgramList(update);
     saveState('mwc_program_kerja', update);
   };
@@ -196,6 +288,7 @@ function AppContent() {
     const update = [item, ...dokumentasiList];
     setDokumentasiList(update);
     saveState('mwc_dokumentasi', update);
+    supabaseUpsert('dokumentasi_kegiatan', item);
   };
 
   const handleAddLocation = (newItem: Omit<LokasiGIS, 'id'>) => {
@@ -203,6 +296,7 @@ function AppContent() {
     const update = [item, ...lokasiList];
     setLokasiList(update);
     saveState('mwc_lokasi_gis', update);
+    supabaseUpsert('lokasi_gis', item);
   };
 
   const handleAddAgenda = (newItem: Omit<AgendaMusyawarah, 'id' | 'absensi'>) => {
@@ -219,10 +313,18 @@ function AppContent() {
     const update = [item, ...agendaList];
     setAgendaList(update);
     saveState('mwc_agenda_musyawarah', update);
+    supabaseUpsert('agenda_musyawarah', item);
   };
 
   const handleUpdateAgenda = (id: string, updates: Partial<AgendaMusyawarah>) => {
-    const update = agendaList.map(a => a.id === id ? { ...a, ...updates } : a);
+    const update = agendaList.map(a => {
+      if (a.id === id) {
+        const updated = { ...a, ...updates };
+        supabaseUpsert('agenda_musyawarah', updated);
+        return updated;
+      }
+      return a;
+    });
     setAgendaList(update);
     saveState('mwc_agenda_musyawarah', update);
   };
@@ -236,12 +338,14 @@ function AppContent() {
     const update = [item, ...beritaList];
     setBeritaList(update);
     saveState('mwc_berita', update);
+    supabaseUpsert('berita_artikel', item);
   };
 
   const handleDeleteBerita = (id: string) => {
     const update = beritaList.filter(b => b.id !== id);
     setBeritaList(update);
     saveState('mwc_berita', update);
+    supabaseDelete('berita_artikel', id);
   };
 
   const handleLogout = () => {

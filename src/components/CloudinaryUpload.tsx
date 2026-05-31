@@ -56,8 +56,8 @@ export default function CloudinaryUpload({
     setError(null);
     setProgress(10);
 
-    const cloudName = 'dkirp8utp';
-    const uploadPreset = 'mwcnu_preset_unsigned'; // unsigned preset representation
+    const cloudName = (import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME || 'dkirp8utp';
+    const uploadPreset = (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET || 'mwcnu_preset_unsigned'; // unsigned preset representation
 
     // Realistic Cloudinary unsigned upload attempt
     try {
