@@ -118,7 +118,7 @@ export default function Login({ userRole, onLogin, onLogout }: PageProps) {
           </div>
           <div className="space-y-1">
             <h2 className="text-sm font-serif font-black tracking-tight text-emerald-950 uppercase">
-              MWCNU SMART GOVERNANCE
+              MWCNU BUNGAH
             </h2>
             <p className="text-[10px] uppercase font-bold tracking-widest text-[#C5A059] font-mono">
               Otentikasi Pengurus Harian

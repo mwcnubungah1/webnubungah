@@ -701,7 +701,7 @@ export default function LettersView({
                     MWC NU BUNGAH
                   </h3>
                   <p className="text-[10px] text-gray-500 font-semibold font-mono">
-                    Sekretariat: Jl. Raya Bungah No. 15, Bungah, Gresik, Jawa Timur | Telp: 0812-3456-7890
+                    Sekretariat: Jl. Raya Bungah No. 15, Bungah, Gresik, Jawa Timur | Telp/WA: +62 899 5023222
                   </p>
                   <p className="text-[9px] text-[#C5A059] italic font-semibold">
                     &quot;Merawat Jagat, Membangun Peradaban&quot;

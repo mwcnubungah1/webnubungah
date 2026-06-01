@@ -47,9 +47,9 @@ export default function PublicLayout({ children, userRole, onLogout }: PublicLay
           <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full animate-pulse" />
           <span>SISTEM INFORMASI ADMINISTRASI &amp; TRANSPARANSI MWCNU BUNGAH</span>
         </div>
-        <div className="hidden sm:flex items-center gap-4">
-          <span>CALL CENTER: +62 812-3456-7890</span>
-          <span>EST. 1926</span>
+        <div className="flex items-center gap-4">
+          <span>CALL CENTER: +62 899 5023222</span>
+          <span className="hidden sm:inline">EST. 1926</span>
         </div>
       </div>
 
@@ -69,11 +69,11 @@ export default function PublicLayout({ children, userRole, onLogout }: PublicLay
                 />
               </div>
               <div className="text-left">
-                <span className="text-emerald-900 font-serif font-black tracking-tight text-xs block leading-tight select-none">
-                  MWCNU SMART GOVERNANCE
+                <span className="text-emerald-900 font-serif font-black tracking-tight text-sm block leading-tight select-none uppercase">
+                  MWCNU BUNGAH
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-600 block leading-none mt-0.5 font-sans">
-                  Kecamatan Bungah
+                <span className="text-[9px] uppercase font-bold tracking-widest text-emerald-600 block leading-none mt-0.5 font-sans">
+                  Pusat Informasi &amp; Layanan Terpadu
                 </span>
               </div>
             </Link>
@@ -263,8 +263,8 @@ export default function PublicLayout({ children, userRole, onLogout }: PublicLay
             <h4 className="text-[10px] uppercase font-bold tracking-widest text-[#D4AF37]">Kantor &amp; Kontak</h4>
             <p className="text-3xs text-emerald-200 leading-normal font-sans">
               Jl. Raya Bungah No. 15, Bungah, Gresik, Jawa Timur 61151. <br />
-              Email: info@mwcnu-sidokerto.or.id <br />
-              Tlp: +62 812-3456-7890
+              Email: mwcnubungah1@gmail.com <br />
+              Call Center / WA: +62 899 5023222
             </p>
           </div>
 

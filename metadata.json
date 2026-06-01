@@ -1,5 +1,5 @@
 {
-  "name": "MWCNU Smart Governance",
+  "name": "MWCNU Bungah",
   "description": "Pusat administrasi, transparansi, dan manajemen data digital Majelis Wakil Cabang Nahdlatul Ulama (MWCNU).",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

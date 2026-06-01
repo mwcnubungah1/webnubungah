@@ -84,7 +84,7 @@ export default function DashboardView({
       {/* Header Panel */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-emerald-900 text-white p-6 rounded-2xl shadow-sm border border-emerald-800">
         <div>
-          <h1 className="text-2xl font-sans font-semibold tracking-tight">MWCNU Smart Governance</h1>
+          <h1 className="text-2xl font-serif font-black tracking-tight text-[#D4AF37]">MWCNU BUNGAH</h1>
           <p className="text-emerald-200 text-sm mt-1">
             Sistem Tata Kelola Administrasi Elektronik, Transparansi Keuangan, dan Pengambilan Keputusan Majelis Wakil Cabang Nahdlatul Ulama.
           </p>

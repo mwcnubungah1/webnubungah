@@ -59,7 +59,7 @@ export default function Home({
 
         <div className="max-w-2xl text-left z-10 space-y-4 my-auto">
           <span className="text-[#D4AF37] text-3xs tracking-widest font-extrabold uppercase bg-emerald-950/70 border border-[#D4AF37]/40 px-3.5 py-1.5 rounded-full">
-            OFFICIAL PORTAL &bull; SMART GOVERNANCE DIGITAL
+            OFFICIAL PORTAL &bull; MWCNU BUNGAH
           </span>
           <h1 className="text-2xl md:text-4xl font-serif font-black tracking-tight leading-tight pt-2">
             Majelis Wakil Cabang Nahdlatul Ulama Bungah
