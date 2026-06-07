@@ -24,83 +24,9 @@ export const SEED_RANTING = [
   { id: 'R-10', nama: 'Ranting Peganden' }
 ];
 
-export const SEED_SURAT_MASUK: SuratMasuk[] = [
-  {
-    id: 'SM-1',
-    nomorSurat: '042/PCNU/A.I/IV/2026',
-    tanggal: '2026-04-12',
-    pengirim: 'PCNU Kabupaten Gresik',
-    perihal: 'Instruksi Pelaksanaan Istighosah Kubro Serentak',
-    lampiran: '1 Berkas',
-    statusDisposisi: 'Sudah Disposisi',
-    disposisiKepada: 'Syuriyah & Tanfidziyah',
-    catatanDisposisi: 'Jadwalkan Lailatul Ijtima keliling ke semua Ranting di Bungah mulai pekan depan.',
-    fileUrl: 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?w=800&auto=format&fit=crop&q=60'
-  },
-  {
-    id: 'SM-2',
-    nomorSurat: '015/PR-IPNU-IPPNU/V/2026',
-    tanggal: '2026-05-18',
-    pengirim: 'PAC IPNU IPPNU Bungah',
-    perihal: 'Permohonan Delegasi Peserta LAKUT (Latihan Kader Utama)',
-    lampiran: '1 Berkas',
-    statusDisposisi: 'Sudah Disposisi',
-    disposisiKepada: 'Lembaga Kaderisasi & Banom',
-    catatanDisposisi: 'Kirimkan minimal 2 perwakilan dari IPNU dan 2 IPPNU terbaik se-Kecamatan Bungah.',
-    fileUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60'
-  },
-  {
-    id: 'SM-3',
-    nomorSurat: '008/LAZISNU-MWC/V/2026',
-    tanggal: '2026-05-28',
-    pengirim: 'KOIN NU Lembaga Amil Zakat Bungah',
-    perihal: 'Laporan Rekapitulasi Sedekah KOIN NU Bulan Mei',
-    lampiran: '1 Lembar',
-    statusDisposisi: 'Belum Disposisi',
-    fileUrl: 'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800&auto=format&fit=crop&q=60'
-  }
-];
+export const SEED_SURAT_MASUK: SuratMasuk[] = [];
 
-export const SEED_SURAT_KELUAR: SuratKeluar[] = [
-  {
-    id: 'SK-1',
-    nomorSurat: '112/MWC-NU/A.I/V/2026',
-    tanggal: '2026-05-10',
-    penerima: 'Seluruh Ketua Pengurus Ranting NU se-Kecamatan Bungah',
-    perihal: 'Undangan Rapat Koordinasi Bulanan & Halal bi Halal MWC NU Bungah',
-    lampiran: '1 Lembar',
-    status: 'Diarsipkan',
-    tandaTanganDigital: 'KH. Sholeh Qosim (Rais Syuriyah) & KH. Achmad Shofwan (Ketua MWC)',
-    content: 'Mengharap dengan hormat kehadiran Bapak/Ibu Pengurus Ranting NU dalam Rapat Koordinasi Bulanan yang akan dilaksanakan pada Minggu malam Senin, bertempat di Kantor MWC NU Bungah. Agenda utama: Evaluasi Koin NU dan persiapan Madrasah Kader Nahdlatul Ulama.',
-    tanggalDibuat: '2026-05-08',
-    dibuatOleh: 'Drs. H. Choirul Anam'
-  },
-  {
-    id: 'SK-2',
-    nomorSurat: '115/MWC-NU/A.G/V/2026',
-    tanggal: '2026-05-20',
-    penerima: 'Camat Bungah & Forkopimca',
-    perihal: 'Permohonan Rekomendasi Lokasi Kegiatan Khitanan Massal Sosial MWC',
-    lampiran: '- ',
-    status: 'Disetujui Ketua',
-    tandaTanganDigital: 'KH. Achmad Shofwan',
-    content: 'Dalam rangka memperingati Hari Lahir NU yang dikemas dengan kegiatan sosial kemasyarakatan, MWC NU Bungah bermaksud untuk menyelenggarakan Khitanan Massal Gratis bagi warga kurang mampu sebanyak 100 anak. Kami memohon rekomendasi izin pemakaian Pendopo Kecamatan Bungah.',
-    tanggalDibuat: '2026-05-19',
-    dibuatOleh: 'Staf Sekretariat - Ahmad Fauzi'
-  },
-  {
-    id: 'SK-3',
-    nomorSurat: '124/MWC-NU/A.I/V/2026',
-    tanggal: '2026-05-29',
-    penerima: 'Pimpinan Yayasan Masjid Jami Al-Anwar Bungah',
-    perihal: 'Pemberitahuan Agenda Turba (Turun ke Bawah) MWC NU',
-    lampiran: '- ',
-    status: 'Draft',
-    content: 'Menyusul keputusan rapat harian MWC NU Bungah, kami menjadwalkan kunjungan silaturahim dan pembinaan organisasi (TURBA) di masjid Al-Anwar pada Jumat malam Sabtu kedua bulan Juni.',
-    tanggalDibuat: '2026-05-29',
-    dibuatOleh: 'Drs. H. Choirul Anam'
-  }
-];
+export const SEED_SURAT_KELUAR: SuratKeluar[] = [];
 
 export const SEED_ARSIP_DOKUMEN: ArsipDokumen[] = [
   {
@@ -165,91 +91,7 @@ export const SEED_ARSIP_DOKUMEN: ArsipDokumen[] = [
   }
 ];
 
-export const SEED_TRANSAKSI_KEUANGAN: TransaksiKeuangan[] = [
-  {
-    id: 'TX-1',
-    tanggal: '2026-05-01',
-    tipe: 'Pemasukan',
-    kategori: 'Iuran',
-    deskripsi: 'Setoran Iuran Anggota Kolektif Ranting Bungah',
-    jumlah: 3500000,
-    buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=100&auto=format&fit=crop&q=60',
-    status: 'Disetujui',
-    disetujuiOleh: 'KH. Achmad Shofwan',
-    auditTrail: ['Pencatatan awal oleh Bendahara H. Mukhlis - 2026-05-01', 'Disetujui Ketua - 2026-05-01']
-  },
-  {
-    id: 'TX-2',
-    tanggal: '2026-05-04',
-    tipe: 'Pemasukan',
-    kategori: 'Donasi',
-    deskripsi: 'Infaq Kelompok Pengusaha Muslim Bungah Peduli',
-    jumlah: 15000000,
-    buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=100&auto=format&fit=crop&q=60',
-    status: 'Disetujui',
-    disetujuiOleh: 'KH. Achmad Shofwan',
-    auditTrail: ['Pencatatan hamba Allah lewat Rek Bank MWC - 2026-05-04', 'Dikonfirmasi Bendahara - 2026-05-04', 'Disetujui Ketua - 2026-05-05']
-  },
-  {
-    id: 'TX-3',
-    tanggal: '2026-05-08',
-    tipe: 'Pengeluaran',
-    kategori: 'Operasional',
-    deskripsi: 'Pembayaran Rekening Listrik, Air & Internet Kantor MWC NU Bungah',
-    jumlah: 1250000,
-    buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=100&auto=format&fit=crop&q=60',
-    status: 'Disetujui',
-    disetujuiOleh: 'KH. Achmad Shofwan',
-    auditTrail: ['Diajukan oleh staf sekrt - 2026-05-07', 'Pembayaran ditransfer Bendahara - 2026-05-08']
-  },
-  {
-    id: 'TX-4',
-    tanggal: '2026-05-12',
-    tipe: 'Pemasukan',
-    kategori: 'Usaha',
-    deskripsi: 'Hasil Penjualan Buku Aqidah Aswaja & Atribut NU Toko MWCNU Center Bungah',
-    jumlah: 4850000,
-    buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=100&auto=format&fit=crop&q=60',
-    status: 'Disetujui',
-    disetujuiOleh: 'KH. Achmad Shofwan',
-    auditTrail: ['Pencatatan kasir toko MWC Bungah - 2026-05-12']
-  },
-  {
-    id: 'TX-5',
-    tanggal: '2026-05-15',
-    tipe: 'Pengeluaran',
-    kategori: 'Kegiatan',
-    deskripsi: 'Subsidi Panitia Lailatul Ijtima & Bahtsul Masail di Ranting Melirang',
-    jumlah: 3000000,
-    buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=100&auto=format&fit=crop&q=60',
-    status: 'Disetujui',
-    disetujuiOleh: 'KH. Achmad Shofwan',
-    auditTrail: ['Pengajuan proposal panitia - 2026-05-10', 'Disetujui Ketua - 2026-05-13', 'Dicairkan Bendahara - 2026-05-15']
-  },
-  {
-    id: 'TX-6',
-    tanggal: '2026-05-22',
-    tipe: 'Pengeluaran',
-    kategori: 'Sosial',
-    deskripsi: 'Bantuan Biaya Pengobatan Kesehatan Warga Dhuafa Ranting Sukorejo (LAZISNU)',
-    jumlah: 2500000,
-    buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=100&auto=format&fit=crop&q=60',
-    status: 'Disetujui',
-    disetujuiOleh: 'KH. Achmad Shofwan',
-    auditTrail: ['Pengajuan dari Ketua Ranting Sukorejo - 2026-05-20', 'Disetujui oleh LAZISNU & Ketua MWC - 2026-05-22']
-  },
-  {
-    id: 'TX-7',
-    tanggal: '2026-05-28',
-    tipe: 'Pengeluaran',
-    kategori: 'Pendidikan',
-    deskripsi: 'Beasiswa Pendidikan Kader Berprestasi PAC IPNU IPPNU Bungah',
-    jumlah: 4000000,
-    buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=100&auto=format&fit=crop&q=60',
-    status: 'Pending',
-    auditTrail: ['Diajukan oleh Pimpinan IPNU IPPNU - 2026-05-28', 'Ditinjau oleh Bendahara - 2026-05-29']
-  }
-];
+export const SEED_TRANSAKSI_KEUANGAN: TransaksiKeuangan[] = [];
 
 export const SEED_ANGGOTA_PENGURUS: AnggotaPengurus[] = [
   {

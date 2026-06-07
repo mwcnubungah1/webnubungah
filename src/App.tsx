@@ -101,19 +101,8 @@ function AppContent() {
             supabaseFetchAll('berita_artikel')
           ]);
 
-          // Protect letters from being cleared to [] due to public RLS policies
-          if (dbSM !== null) {
-            if (isAuth || dbSM.length > 0) {
-              sm = dbSM;
-              saveState('mwc_surat_masuk', dbSM);
-            }
-          }
-          if (dbSK !== null) {
-            if (isAuth || dbSK.length > 0) {
-              sk = dbSK;
-              saveState('mwc_surat_keluar', dbSK);
-            }
-          }
+          if (dbSM !== null) { sm = dbSM; saveState('mwc_surat_masuk', dbSM); }
+          if (dbSK !== null) { sk = dbSK; saveState('mwc_surat_keluar', dbSK); }
           if (dbAD !== null) { ad = dbAD; saveState('mwc_arsip_docs', dbAD); }
           if (dbTX !== null) { tx = dbTX; saveState('mwc_transaksi', dbTX); }
           if (dbAP !== null) { members_list = dbAP; saveState('mwc_anggota', dbAP); }
