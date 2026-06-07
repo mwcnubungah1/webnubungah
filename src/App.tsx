@@ -33,7 +33,10 @@ import {
 
 function AppContent() {
   const { pathname, navigate } = useRouter();
-  const [role, setRole] = useState<UserRole>('ADMIN_MWCNU');
+  const [role, setRole] = useState<UserRole>(() => {
+    const stored = localStorage.getItem('mwc_user_role');
+    return (stored as UserRole) || 'PUBLIK_WARGA';
+  });
 
   // Unified persistent State arrays
   const [suratMasuk, setSuratMasuk] = useState<SuratMasuk[]>([]);
@@ -60,7 +63,6 @@ function AppContent() {
       const locations = localStorage.getItem('mwc_lokasi_gis');
       const meetings = localStorage.getItem('mwc_agenda_musyawarah');
       const berita = localStorage.getItem('mwc_berita');
-      const storedRole = localStorage.getItem('mwc_user_role');
 
       // Initialize with caches or standard seeds
       let sm = sMasuk ? JSON.parse(sMasuk) : SEED_SURAT_MASUK;
@@ -77,6 +79,15 @@ function AppContent() {
       if (isSupabaseConfigured && supabase) {
         console.log("Supabase is configured. Syncing tables in background...");
         try {
+          // Check if there is an active authenticated session
+          let isAuth = false;
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            isAuth = !!session;
+          } catch (sessionErr) {
+            console.warn("Could not check active session:", sessionErr);
+          }
+
           const [dbSM, dbSK, dbAD, dbTX, dbAP, dbPRG, dbDOC, dbLOC, dbAG, dbBRT] = await Promise.all([
             supabaseFetchAll('surat_masuk'),
             supabaseFetchAll('surat_keluar'),
@@ -90,8 +101,19 @@ function AppContent() {
             supabaseFetchAll('berita_artikel')
           ]);
 
-          if (dbSM !== null) { sm = dbSM; saveState('mwc_surat_masuk', dbSM); }
-          if (dbSK !== null) { sk = dbSK; saveState('mwc_surat_keluar', dbSK); }
+          // Protect letters from being cleared to [] due to public RLS policies
+          if (dbSM !== null) {
+            if (isAuth || dbSM.length > 0) {
+              sm = dbSM;
+              saveState('mwc_surat_masuk', dbSM);
+            }
+          }
+          if (dbSK !== null) {
+            if (isAuth || dbSK.length > 0) {
+              sk = dbSK;
+              saveState('mwc_surat_keluar', dbSK);
+            }
+          }
           if (dbAD !== null) { ad = dbAD; saveState('mwc_arsip_docs', dbAD); }
           if (dbTX !== null) { tx = dbTX; saveState('mwc_transaksi', dbTX); }
           if (dbAP !== null) { members_list = dbAP; saveState('mwc_anggota', dbAP); }
@@ -117,16 +139,10 @@ function AppContent() {
       setLokasiList(lg);
       setAgendaList(am);
       setBeritaList(ba);
-
-      if (storedRole) {
-        setRole(storedRole as UserRole);
-      } else {
-        setRole('PUBLIK_WARGA');
-      }
     }
 
     loadAllData();
-  }, []);
+  }, [role]);
 
   // Save to LocalStorage helpers upon trigger changes
   const saveState = (key: string, data: any) => {
