@@ -1,6 +1,6 @@
 {
-  "name": "MWCNU Bungah",
-  "description": "Pusat administrasi, transparansi, dan manajemen data digital Majelis Wakil Cabang Nahdlatul Ulama (MWCNU).",
+  "name": "Kanal Transparansi MWC NU Bungah",
+  "description": "Kanal transparansi publik, akuntabilitas keuangan, inventarisasi aset, dan database kader MWC NU Bungah.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

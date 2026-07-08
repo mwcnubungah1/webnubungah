@@ -1,433 +1,371 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { RouterProvider, RouteRenderer, useRouter } from './router';
-import PublicLayout from './components/PublicLayout';
-import { isSupabaseConfigured, supabase, supabaseFetchAll, supabaseUpsert, supabaseDelete } from './lib/supabase';
-
-// Types and Seed Data
 import { 
-  UserRole, 
-  SuratMasuk, 
-  SuratKeluar, 
-  ArsipDokumen, 
-  TransaksiKeuangan, 
-  AnggotaPengurus, 
-  ProgramKerja, 
-  DokumentasiKegiatan, 
-  LokasiGIS, 
-  AgendaMusyawarah,
-  BeritaArtikel 
+  Lock, 
+  User, 
+  Key, 
+  AlertCircle, 
+  CheckCircle, 
+  Menu, 
+  LogOut, 
+  UserCheck, 
+  ShieldAlert, 
+  Eye,
+  Info
+} from 'lucide-react';
+
+import { 
+  Role, 
+  Ranting, 
+  Kader, 
+  Kegiatan, 
+  TransparansiDana, 
+  KoinS3, 
+  Persuratan, 
+  Usaha, 
+  SaranaIbadah, 
+  SaranaPendidikan, 
+  Berita, 
+  Dokumentasi, 
+  Aspirasi,
+  ModelType,
+  Pengurus
 } from './types';
+
 import { 
-  SEED_SURAT_MASUK, 
-  SEED_SURAT_KELUAR, 
-  SEED_ARSIP_DOKUMEN, 
-  SEED_TRANSAKSI_KEUANGAN, 
-  SEED_ANGGOTA_PENGURUS, 
-  SEED_PROGRAM_KERJA, 
-  SEED_DOKUMENTASI, 
-  SEED_LOKASI_GIS, 
-  SEED_AGENDAMUSYAWARAH,
-  SEED_BERITA
-} from './data/seedData';
+  mockRantings, 
+  mockPengurus, 
+  mockKader, 
+  mockKegiatan, 
+  mockTransparansiDana, 
+  mockKoinS3, 
+  mockPersuratan, 
+  mockUsaha, 
+  mockSaranaIbadah, 
+  mockSaranaPendidikan, 
+  mockBerita, 
+  mockDokumentasi, 
+  mockAspirasi 
+} from './data/mockData';
 
-function AppContent() {
-  const { pathname, navigate } = useRouter();
-  const [role, setRole] = useState<UserRole>(() => {
-    const stored = localStorage.getItem('mwc_user_role');
-    return (stored as UserRole) || 'PUBLIK_WARGA';
-  });
+import { isSupabaseConfigured, fetchTableData, insertTableData } from './lib/supabaseClient';
 
-  // Unified persistent State arrays
-  const [suratMasuk, setSuratMasuk] = useState<SuratMasuk[]>([]);
-  const [suratKeluar, setSuratKeluar] = useState<SuratKeluar[]>([]);
-  const [arsipDocs, setArsipDocs] = useState<ArsipDokumen[]>([]);
-  const [transaksiList, setTransaksiList] = useState<TransaksiKeuangan[]>([]);
-  const [anggotaList, setAnggotaList] = useState<AnggotaPengurus[]>([]);
-  const [programList, setProgramList] = useState<ProgramKerja[]>([]);
-  const [dokumentasiList, setDokumentasiList] = useState<DokumentasiKegiatan[]>([]);
-  const [lokasiList, setLokasiList] = useState<LokasiGIS[]>([]);
-  const [agendaList, setAgendaList] = useState<AgendaMusyawarah[]>([]);
-  const [beritaList, setBeritaList] = useState<BeritaArtikel[]>([]);
+// Modular layouts
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import PortalPages from './components/PortalPages';
+import AdminCMS from './components/AdminCMS';
+import TechnicalSpecs from './components/TechnicalSpecs';
+import LoginView from './components/LoginView';
 
-  // Load from Supabase (if configured) or fallback to LocalStorage/Seeds
+export default function App() {
+  // Navigation states
+  const [activeTab, setActiveTab] = useState<string>('home');
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [activeModel, setActiveModel] = useState<ModelType>('kader');
+
+  // Authentication states
+  const [userRole, setUserRole] = useState<Role>('guest');
+  const [selectedRantingId, setSelectedRantingId] = useState<string>('mwc');
+
+  // Database collections with LocalStorage/Supabase persistence
+  const [kaderList, setKaderList] = useState<Kader[]>([]);
+  const [pengurusList, setPengurusList] = useState<Pengurus[]>([]);
+  const [kegiatanList, setKegiatanList] = useState<Kegiatan[]>([]);
+  const [kasList, setKasList] = useState<TransparansiDana[]>([]);
+  const [koinList, setKoinList] = useState<KoinS3[]>([]);
+  const [suratList, setSuratList] = useState<Persuratan[]>([]);
+  const [usahaList, setUsahaList] = useState<Usaha[]>([]);
+  const [saranaIbadahList, setSaranaIbadahList] = useState<SaranaIbadah[]>([]);
+  const [saranaPendidikanList, setSaranaPendidikanList] = useState<SaranaPendidikan[]>([]);
+  const [beritaList, setBeritaList] = useState<Berita[]>([]);
+  const [dokumentasiList, setDokumentasiList] = useState<Dokumentasi[]>([]);
+  const [aspirasiList, setAspirasiList] = useState<Aspirasi[]>([]);
+
+  // Initialize DB from Supabase or LocalStorage/mockData
   useEffect(() => {
-    async function loadAllData() {
-      const sMasuk = localStorage.getItem('mwc_surat_masuk');
-      const sKeluar = localStorage.getItem('mwc_surat_keluar');
-      const aDocs = localStorage.getItem('mwc_arsip_docs');
-      const txs = localStorage.getItem('mwc_transaksi');
-      const members = localStorage.getItem('mwc_anggota');
-      const progs = localStorage.getItem('mwc_program_kerja');
-      const docus = localStorage.getItem('mwc_dokumentasi');
-      const locations = localStorage.getItem('mwc_lokasi_gis');
-      const meetings = localStorage.getItem('mwc_agenda_musyawarah');
-      const berita = localStorage.getItem('mwc_berita');
-
-      // Initialize with caches or standard seeds
-      let sm = sMasuk ? JSON.parse(sMasuk) : SEED_SURAT_MASUK;
-      let sk = sKeluar ? JSON.parse(sKeluar) : SEED_SURAT_KELUAR;
-      let ad = aDocs ? JSON.parse(aDocs) : SEED_ARSIP_DOKUMEN;
-      let tx = txs ? JSON.parse(txs) : SEED_TRANSAKSI_KEUANGAN;
-      let members_list = members ? JSON.parse(members) : SEED_ANGGOTA_PENGURUS;
-      let pk = progs ? JSON.parse(progs) : SEED_PROGRAM_KERJA;
-      let dk = docus ? JSON.parse(docus) : SEED_DOKUMENTASI;
-      let lg = locations ? JSON.parse(locations) : SEED_LOKASI_GIS;
-      let am = meetings ? JSON.parse(meetings) : SEED_AGENDAMUSYAWARAH;
-      let ba = berita ? JSON.parse(berita) : SEED_BERITA;
-
-      if (isSupabaseConfigured && supabase) {
-        console.log("Supabase is configured. Syncing tables in background...");
+    async function initData() {
+      if (isSupabaseConfigured) {
         try {
-          // Check if there is an active authenticated session
-          let isAuth = false;
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            isAuth = !!session;
-          } catch (sessionErr) {
-            console.warn("Could not check active session:", sessionErr);
-          }
-
-          const [dbSM, dbSK, dbAD, dbTX, dbAP, dbPRG, dbDOC, dbLOC, dbAG, dbBRT] = await Promise.all([
-            supabaseFetchAll('surat_masuk'),
-            supabaseFetchAll('surat_keluar'),
-            supabaseFetchAll('arsip_dokumen'),
-            supabaseFetchAll('transaksi_keuangan'),
-            supabaseFetchAll('anggota_pengurus'),
-            supabaseFetchAll('program_kerja'),
-            supabaseFetchAll('dokumentasi_kegiatan'),
-            supabaseFetchAll('lokasi_gis'),
-            supabaseFetchAll('agenda_musyawarah'),
-            supabaseFetchAll('berita_artikel')
+          const [
+            kader,
+            kegiatan,
+            kas,
+            koin,
+            surat,
+            usaha,
+            saranaIbadah,
+            saranaPendidikan,
+            berita,
+            dokumentasi,
+            aspirasi,
+            pengurus
+          ] = await Promise.all([
+            fetchTableData('kader'),
+            fetchTableData('kegiatan'),
+            fetchTableData('keuangan'),
+            fetchTableData('koin_s3'),
+            fetchTableData('persuratan'),
+            fetchTableData('usaha'),
+            fetchTableData('sarana_ibadah'),
+            fetchTableData('sarana_pendidikan'),
+            fetchTableData('berita'),
+            fetchTableData('dokumentasi'),
+            fetchTableData('aspirasi'),
+            fetchTableData('pengurus').catch(() => [])
           ]);
 
-          if (dbSM !== null) { sm = dbSM; saveState('mwc_surat_masuk', dbSM); }
-          if (dbSK !== null) { sk = dbSK; saveState('mwc_surat_keluar', dbSK); }
-          if (dbAD !== null) { ad = dbAD; saveState('mwc_arsip_docs', dbAD); }
-          if (dbTX !== null) { tx = dbTX; saveState('mwc_transaksi', dbTX); }
-          if (dbAP !== null) { members_list = dbAP; saveState('mwc_anggota', dbAP); }
-          if (dbPRG !== null) { pk = dbPRG; saveState('mwc_program_kerja', dbPRG); }
-          if (dbDOC !== null) { dk = dbDOC; saveState('mwc_dokumentasi', dbDOC); }
-          if (dbLOC !== null) { lg = dbLOC; saveState('mwc_lokasi_gis', dbLOC); }
-          if (dbAG !== null) { am = dbAG; saveState('mwc_agenda_musyawarah', dbAG); }
-          if (dbBRT !== null) { ba = dbBRT; saveState('mwc_berita', dbBRT); }
-          
-          console.log("Data loaded and synced successfully with Supabase!");
-        } catch (err) {
-          console.warn("Could not fetch remote table records. Standard fallback assets will load:", err);
+          setKaderList(kader.length > 0 ? kader : mockKader);
+          setPengurusList(pengurus.length > 0 ? pengurus : mockPengurus);
+          setKegiatanList(kegiatan.length > 0 ? kegiatan : mockKegiatan);
+          setKasList(kas.length > 0 ? kas : mockTransparansiDana);
+          setKoinList(koin.length > 0 ? koin : mockKoinS3);
+          setSuratList(surat.length > 0 ? surat : mockPersuratan);
+          setUsahaList(usaha.length > 0 ? usaha : mockUsaha);
+          setSaranaIbadahList(saranaIbadah.length > 0 ? saranaIbadah : mockSaranaIbadah);
+          setSaranaPendidikanList(saranaPendidikan.length > 0 ? saranaPendidikan : mockSaranaPendidikan);
+          setBeritaList(berita.length > 0 ? berita : mockBerita);
+          setDokumentasiList(dokumentasi.length > 0 ? dokumentasi : mockDokumentasi);
+          setAspirasiList(aspirasi.length > 0 ? aspirasi : mockAspirasi);
+          return;
+        } catch (error) {
+          console.error("Failed to load from Supabase, falling back to local storage", error);
         }
       }
 
-      setSuratMasuk(sm);
-      setSuratKeluar(sk);
-      setArsipDocs(ad);
-      setTransaksiList(tx);
-      setAnggotaList(members_list);
-      setProgramList(pk);
-      setDokumentasiList(dk);
-      setLokasiList(lg);
-      setAgendaList(am);
-      setBeritaList(ba);
+      // Fallback: local storage
+      const loadOrInit = <T,>(key: string, defaultData: T[]): T[] => {
+        const stored = localStorage.getItem(`mwc_nu_${key}`);
+        if (stored) {
+          try {
+            return JSON.parse(stored);
+          } catch (e) {
+            console.error(`Error parsing ${key}`, e);
+          }
+        }
+        localStorage.setItem(`mwc_nu_${key}`, JSON.stringify(defaultData));
+        return defaultData;
+      };
+
+      setKaderList(loadOrInit('kader', mockKader));
+      setPengurusList(loadOrInit('pengurus', mockPengurus));
+      setKegiatanList(loadOrInit('kegiatan', mockKegiatan));
+      setKasList(loadOrInit('kas', mockTransparansiDana));
+      setKoinList(loadOrInit('koin_s3', mockKoinS3));
+      setSuratList(loadOrInit('persuratan', mockPersuratan));
+      setUsahaList(loadOrInit('usaha', mockUsaha));
+      setSaranaIbadahList(loadOrInit('sarana_ibadah', mockSaranaIbadah));
+      setSaranaPendidikanList(loadOrInit('sarana_pendidikan', mockSaranaPendidikan));
+      setBeritaList(loadOrInit('berita', mockBerita));
+      setDokumentasiList(loadOrInit('dokumentasi', mockDokumentasi));
+      setAspirasiList(loadOrInit('aspirasi', mockAspirasi));
     }
 
-    loadAllData();
-  }, [role]);
+    initData();
+  }, []);
 
-  // Save to LocalStorage helpers upon trigger changes
-  const saveState = (key: string, data: any) => {
-    localStorage.setItem(key, JSON.stringify(data));
-  };
+  // Sync state back to LocalStorage on changes (only when not using Supabase to save storage space/avoid race conditions, or as redundancy)
+  useEffect(() => {
+    if (kaderList.length > 0) localStorage.setItem('mwc_nu_kader', JSON.stringify(kaderList));
+  }, [kaderList]);
+  useEffect(() => {
+    if (pengurusList.length > 0) localStorage.setItem('mwc_nu_pengurus', JSON.stringify(pengurusList));
+  }, [pengurusList]);
+  useEffect(() => {
+    if (kegiatanList.length > 0) localStorage.setItem('mwc_nu_kegiatan', JSON.stringify(kegiatanList));
+  }, [kegiatanList]);
+  useEffect(() => {
+    if (kasList.length > 0) localStorage.setItem('mwc_nu_kas', JSON.stringify(kasList));
+  }, [kasList]);
+  useEffect(() => {
+    if (koinList.length > 0) localStorage.setItem('mwc_nu_koin_s3', JSON.stringify(koinList));
+  }, [koinList]);
+  useEffect(() => {
+    if (suratList.length > 0) localStorage.setItem('mwc_nu_persuratan', JSON.stringify(suratList));
+  }, [suratList]);
+  useEffect(() => {
+    if (usahaList.length > 0) localStorage.setItem('mwc_nu_usaha', JSON.stringify(usahaList));
+  }, [usahaList]);
+  useEffect(() => {
+    if (saranaIbadahList.length > 0) localStorage.setItem('mwc_nu_sarana_ibadah', JSON.stringify(saranaIbadahList));
+  }, [saranaIbadahList]);
+  useEffect(() => {
+    if (saranaPendidikanList.length > 0) localStorage.setItem('mwc_nu_sarana_pendidikan', JSON.stringify(saranaPendidikanList));
+  }, [saranaPendidikanList]);
+  useEffect(() => {
+    if (beritaList.length > 0) localStorage.setItem('mwc_nu_berita', JSON.stringify(beritaList));
+  }, [beritaList]);
+  useEffect(() => {
+    if (dokumentasiList.length > 0) localStorage.setItem('mwc_nu_dokumentasi', JSON.stringify(dokumentasiList));
+  }, [dokumentasiList]);
+  useEffect(() => {
+    if (aspirasiList.length > 0) localStorage.setItem('mwc_nu_aspirasi', JSON.stringify(aspirasiList));
+  }, [aspirasiList]);
 
-  const handleSetRole = (newRole: UserRole) => {
-    setRole(newRole);
-    localStorage.setItem('mwc_user_role', newRole);
-  };
-
-  // State Change Operations wrapped cleanly
-  const handleAddSuratMasuk = (newItem: Omit<SuratMasuk, 'id'>) => {
-    const item: SuratMasuk = { ...newItem, id: `SM-INDX-${suratMasuk.length + 1}` };
-    const update = [item, ...suratMasuk];
-    setSuratMasuk(update);
-    saveState('mwc_surat_masuk', update);
-    supabaseUpsert('surat_masuk', item);
-  };
-
-  const handleUpdateSuratMasuk = (id: string, updates: Partial<SuratMasuk>) => {
-    const update = suratMasuk.map(s => {
-      if (s.id === id) {
-        const updated = { ...s, ...updates };
-        supabaseUpsert('surat_masuk', updated);
-        return updated;
-      }
-      return s;
-    });
-    setSuratMasuk(update);
-    saveState('mwc_surat_masuk', update);
-  };
-
-  const handleAddSuratKeluar = (newItem: Omit<SuratKeluar, 'id' | 'tanggalDibuat'>) => {
-    const item: SuratKeluar = { 
-      ...newItem, 
-      id: `SK-INDX-${suratKeluar.length + 1}`,
-      tanggalDibuat: new Date().toISOString().split('T')[0]
+  // Handler: Add Public Aspiration
+  const handleAddAspirasi = async (newAspirasi: Omit<Aspirasi, 'id' | 'date' | 'status'>) => {
+    const fullAspirasi: Aspirasi = {
+      ...newAspirasi,
+      id: `as-${Date.now()}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: 'Masuk'
     };
-    const update = [item, ...suratKeluar];
-    setSuratKeluar(update);
-    saveState('mwc_surat_keluar', update);
-    supabaseUpsert('surat_keluar', item);
-  };
 
-  const handleUpdateSuratKeluar = (id: string, updates: Partial<SuratKeluar>) => {
-    const update = suratKeluar.map(s => {
-      if (s.id === id) {
-        const updated = { ...s, ...updates };
-        supabaseUpsert('surat_keluar', updated);
-        return updated;
+    let savedAspirasi = fullAspirasi;
+    if (isSupabaseConfigured) {
+      try {
+        savedAspirasi = await insertTableData('aspirasi', fullAspirasi);
+      } catch (e) {
+        console.error("Failed to insert aspirasi into Supabase", e);
       }
-      return s;
-    });
-    setSuratKeluar(update);
-    saveState('mwc_surat_keluar', update);
+    }
+
+    const updated = [savedAspirasi, ...aspirasiList];
+    setAspirasiList(updated);
+    localStorage.setItem('mwc_nu_aspirasi', JSON.stringify(updated));
   };
 
-  const handleAddArsip = (newItem: Omit<ArsipDokumen, 'id'>) => {
-    const item: ArsipDokumen = { ...newItem, id: `ARS-${Date.now()}` };
-    const update = [item, ...arsipDocs];
-    setArsipDocs(update);
-    saveState('mwc_arsip_docs', update);
-    supabaseUpsert('arsip_dokumen', item);
-  };
-
-  const handleDeleteArsip = (id: string) => {
-    const update = arsipDocs.filter(a => a.id !== id);
-    setArsipDocs(update);
-    saveState('mwc_arsip_docs', update);
-    supabaseDelete('arsip_dokumen', id);
-  };
-
-  const handleAddTransaksi = (newItem: Omit<TransaksiKeuangan, 'id' | 'auditTrail'>) => {
-    const item: TransaksiKeuangan = { 
-      ...newItem, 
-      id: `TX-${transaksiList.length + 10}`,
-      auditTrail: [`Rincian baru dicatat pada ${new Date().toISOString().split('T')[0]}`]
-    };
-    const update = [item, ...transaksiList];
-    setTransaksiList(update);
-    saveState('mwc_transaksi', update);
-    supabaseUpsert('transaksi_keuangan', item);
-  };
-
-  const handleUpdateTransaksi = (id: string, updates: Partial<TransaksiKeuangan>) => {
-    const update = transaksiList.map(t => {
-      if (t.id === id) {
-        const updated = { ...t, ...updates };
-        supabaseUpsert('transaksi_keuangan', updated);
-        return updated;
-      }
-      return t;
-    });
-    setTransaksiList(update);
-    saveState('mwc_transaksi', update);
-  };
-
-  const handleAddAnggota = (newItem: Omit<AnggotaPengurus, 'id'>) => {
-    const item: AnggotaPengurus = { 
-      ...newItem, 
-      id: `MEMB-${Date.now()}`,
-      fotoUrl: newItem.fotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80'
-    };
-    const update = [item, ...anggotaList];
-    setAnggotaList(update);
-    saveState('mwc_anggota', update);
-    supabaseUpsert('anggota_pengurus', item);
-  };
-
-  const handleUpdateAnggota = (id: string, updates: Partial<AnggotaPengurus>) => {
-    const update = anggotaList.map(a => {
-      if (a.id === id) {
-        const updated = { ...a, ...updates };
-        supabaseUpsert('anggota_pengurus', updated);
-        return updated;
-      }
-      return a;
-    });
-    setAnggotaList(update);
-    saveState('mwc_anggota', update);
-  };
-
-  const handleDeleteAnggota = (id: string) => {
-    const update = anggotaList.filter(a => a.id !== id);
-    setAnggotaList(update);
-    saveState('mwc_anggota', update);
-    supabaseDelete('anggota_pengurus', id);
-  };
-
-  const handleAddProgram = (newItem: Omit<ProgramKerja, 'id' | 'realisasiAnggaran' | 'kegiatanTerbantu'>) => {
-    const item: ProgramKerja = { 
-      ...newItem, 
-      id: `PRG-INDX-${programList.length + 1}`,
-      realisasiAnggaran: 0,
-      kegiatanTerbantu: []
-    };
-    const update = [item, ...programList];
-    setProgramList(update);
-    saveState('mwc_program_kerja', update);
-    supabaseUpsert('program_kerja', item);
-  };
-
-  const handleUpdateProgram = (id: string, updates: Partial<ProgramKerja>) => {
-    const update = programList.map(p => {
-      if (p.id === id) {
-        const updated = { ...p, ...updates };
-        supabaseUpsert('program_kerja', updated);
-        return updated;
-      }
-      return p;
-    });
-    setProgramList(update);
-    saveState('mwc_program_kerja', update);
-  };
-
-  const handleAddDokumentasi = (newItem: Omit<DokumentasiKegiatan, 'id'>) => {
-    const item: DokumentasiKegiatan = { ...newItem, id: `DOK-${Date.now()}` };
-    const update = [item, ...dokumentasiList];
-    setDokumentasiList(update);
-    saveState('mwc_dokumentasi', update);
-    supabaseUpsert('dokumentasi_kegiatan', item);
-  };
-
-  const handleAddLocation = (newItem: Omit<LokasiGIS, 'id'>) => {
-    const item: LokasiGIS = { ...newItem, id: `LOC-${Date.now()}` };
-    const update = [item, ...lokasiList];
-    setLokasiList(update);
-    saveState('mwc_lokasi_gis', update);
-    supabaseUpsert('lokasi_gis', item);
-  };
-
-  const handleAddAgenda = (newItem: Omit<AgendaMusyawarah, 'id' | 'absensi'>) => {
-    const item: AgendaMusyawarah = { 
-      ...newItem, 
-      id: `AG-${agendaList.length + 1}`,
-      absensi: [
-        { nama: 'KH. Sholeh Qosim, M.Pd.I', jabatan: 'Rais Syuriyah', kehadiran: 'Izin' },
-        { nama: 'H. Achmad Shofwan, S.Ag', jabatan: 'Ketua Tanfidziyah', kehadiran: 'Izin' },
-        { nama: 'Drs. H. Choirul Anam', jabatan: 'Sekretaris', kehadiran: 'Izin' },
-        { nama: 'H. Mukhlis Al-Hakim, S.E.', jabatan: 'Bendahara', kehadiran: 'Izin' }
-      ]
-    };
-    const update = [item, ...agendaList];
-    setAgendaList(update);
-    saveState('mwc_agenda_musyawarah', update);
-    supabaseUpsert('agenda_musyawarah', item);
-  };
-
-  const handleUpdateAgenda = (id: string, updates: Partial<AgendaMusyawarah>) => {
-    const update = agendaList.map(a => {
-      if (a.id === id) {
-        const updated = { ...a, ...updates };
-        supabaseUpsert('agenda_musyawarah', updated);
-        return updated;
-      }
-      return a;
-    });
-    setAgendaList(update);
-    saveState('mwc_agenda_musyawarah', update);
-  };
-
-  const handleAddBerita = (newItem: Omit<BeritaArtikel, 'id' | 'bacaCount'>) => {
-    const item: BeritaArtikel = {
-      ...newItem,
-      id: `BRT-${Date.now()}`,
-      bacaCount: 0
-    };
-    const update = [item, ...beritaList];
-    setBeritaList(update);
-    saveState('mwc_berita', update);
-    supabaseUpsert('berita_artikel', item);
-  };
-
-  const handleDeleteBerita = (id: string) => {
-    const update = beritaList.filter(b => b.id !== id);
-    setBeritaList(update);
-    saveState('mwc_berita', update);
-    supabaseDelete('berita_artikel', id);
-  };
-
+  // Handler: Simulate Logout
   const handleLogout = () => {
-    handleSetRole('PUBLIK_WARGA');
-    navigate('/');
+    setUserRole('guest');
+    setSelectedRantingId('mwc');
+    setActiveTab('home');
   };
 
-  // Compile unified properties to deliver down to page components automatically
-  const compiledProps = {
-    userRole: role,
-    onLogin: handleSetRole,
-    onLogout: handleLogout,
+  // Path-based client-side routing synchronization
+  useEffect(() => {
+    const handlePathChange = () => {
+      const path = window.location.pathname.replace(/^\//, '');
+      if (path) {
+        if (path === 'admin' && userRole === 'guest') {
+          setActiveTab('login');
+        } else {
+          setActiveTab(path);
+        }
+      } else {
+        setActiveTab('home');
+      }
+    };
 
-    // Collections
-    suratMasuk,
-    suratKeluar,
-    arsipDocs,
-    transaksiList,
-    anggotaList,
-    programList,
-    dokumentasiList,
-    lokasiList,
-    agendaList,
-    beritaList,
+    // Run on initial load
+    handlePathChange();
 
-    // Mutation Event Callbacks
-    onAddSuratMasuk: handleAddSuratMasuk,
-    onUpdateSuratMasuk: handleUpdateSuratMasuk,
-    onAddSuratKeluar: handleAddSuratKeluar,
-    onUpdateSuratKeluar: handleUpdateSuratKeluar,
-    onAddArsip: handleAddArsip,
-    onDeleteArsip: handleDeleteArsip,
-    onAddTransaksi: handleAddTransaksi,
-    onUpdateTransaksi: handleUpdateTransaksi,
-    onAddAnggota: handleAddAnggota,
-    onUpdateAnggota: handleUpdateAnggota,
-    onDeleteAnggota: handleDeleteAnggota,
-    onAddProgram: handleAddProgram,
-    onUpdateProgram: handleUpdateProgram,
-    onAddDokumentasi: handleAddDokumentasi,
-    onAddLokasi: handleAddLocation,
-    onAddAgenda: handleAddAgenda,
-    onUpdateAgenda: handleUpdateAgenda,
-    onAddBerita: handleAddBerita,
-    onDeleteBerita: handleDeleteBerita
-  };
+    // Listen to history popstate (back/forward navigation)
+    window.addEventListener('popstate', handlePathChange);
+    return () => {
+      window.removeEventListener('popstate', handlePathChange);
+    };
+  }, [userRole]);
 
-  const isPlainPage = pathname === '/login' || pathname.startsWith('/admin');
+  // Sync activeTab state changes to the URL path
+  useEffect(() => {
+    const currentPath = window.location.pathname.replace(/^\//, '') || 'home';
+    if (currentPath !== activeTab) {
+      const targetPath = activeTab === 'home' ? '/' : `/${activeTab}`;
+      window.history.pushState(null, '', targetPath);
+    }
+  }, [activeTab]);
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={pathname}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className="min-h-screen text-slate-900 bg-slate-50/50 flex flex-col font-sans"
-      >
-        {isPlainPage ? (
-          <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-8">
-            <RouteRenderer pageProps={compiledProps} />
-          </div>
-        ) : (
-          <PublicLayout userRole={role} onLogout={handleLogout}>
-            <RouteRenderer pageProps={compiledProps} />
-          </PublicLayout>
-        )}
-      </motion.div>
-    </AnimatePresence>
-  );
-}
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        isOpen={sidebarOpen} 
+        setIsOpen={setSidebarOpen} 
+        userRole={userRole}
+        onLogout={handleLogout}
+        activeModel={activeModel}
+        setActiveModel={setActiveModel}
+      />
 
-export default function App() {
-  return (
-    <RouterProvider>
-      <AppContent />
-    </RouterProvider>
+      {/* Main app contents area */}
+      <div className="flex-1 flex flex-col min-h-screen lg:pl-72">
+        <Header 
+          activeTab={activeTab} 
+          setSidebarOpen={setSidebarOpen} 
+          userRole={userRole}
+          setUserRole={setUserRole}
+          selectedRantingId={selectedRantingId}
+          setSelectedRantingId={setSelectedRantingId}
+          setActiveTab={setActiveTab}
+        />
+
+        {/* Dynamic Page router */}
+        <main id="main-content-view" className="flex-grow p-4 md:p-8 max-w-7xl w-full mx-auto pb-16">
+          {activeTab === 'login' && (
+            <LoginView 
+              setUserRole={setUserRole} 
+              setSelectedRantingId={setSelectedRantingId} 
+              setActiveTab={setActiveTab} 
+            />
+          )}
+          
+          {activeTab === 'admin' && (
+            userRole !== 'guest' ? (
+              <AdminCMS 
+                userRole={userRole}
+                rantings={mockRantings}
+                kaderList={kaderList}
+                setKaderList={setKaderList}
+                kegiatanList={kegiatanList}
+                setKegiatanList={setKegiatanList}
+                kasList={kasList}
+                setKasList={setKasList}
+                koinList={koinList}
+                setKoinList={setKoinList}
+                suratList={suratList}
+                setSuratList={setSuratList}
+                usahaList={usahaList}
+                setUsahaList={setUsahaList}
+                saranaIbadahList={saranaIbadahList}
+                setSaranaIbadahList={setSaranaIbadahList}
+                saranaPendidikanList={saranaPendidikanList}
+                setSaranaPendidikanList={setSaranaPendidikanList}
+                beritaList={beritaList}
+                setBeritaList={setBeritaList}
+                dokumentasiList={dokumentasiList}
+                setDokumentasiList={setDokumentasiList}
+                aspirasiList={aspirasiList}
+                setAspirasiList={setAspirasiList}
+                pengurusList={pengurusList}
+                setPengurusList={setPengurusList}
+                activeModel={activeModel}
+                setActiveModel={setActiveModel}
+              />
+            ) : (
+              <LoginView 
+                setUserRole={setUserRole} 
+                setSelectedRantingId={setSelectedRantingId} 
+                setActiveTab={setActiveTab} 
+              />
+            )
+          )}
+
+          {activeTab === 'specs' && <TechnicalSpecs />}
+
+          {/* Render regular public pages */}
+          {activeTab !== 'login' && activeTab !== 'admin' && activeTab !== 'specs' && (
+            <PortalPages 
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              rantings={mockRantings}
+              pengurusList={pengurusList}
+              kaderList={kaderList}
+              kegiatanList={kegiatanList}
+              kasList={kasList}
+              koinList={koinList}
+              suratList={suratList}
+              usahaList={usahaList}
+              saranaIbadahList={saranaIbadahList}
+              saranaPendidikanList={saranaPendidikanList}
+              beritaList={beritaList}
+              dokumentasiList={dokumentasiList}
+              aspirasiList={aspirasiList}
+              addAspirasi={handleAddAspirasi}
+            />
+          )}
+        </main>
+      </div>
+    </div>
   );
 }

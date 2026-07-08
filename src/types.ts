@@ -1,162 +1,176 @@
-/**
- * Types definition for MWCNU Smart Governance
- */
+export type Role = 'guest' | 'super_admin' | 'admin_ranting' | 'admin_lazisnu';
 
-export type UserRole = 'ADMIN_MWCNU' | 'SEKRETARIS' | 'KETUA' | 'PUBLIK_WARGA';
-
-export interface SuratMasuk {
-  id: string;
-  nomorSurat: string;
-  tanggal: string;
-  pengirim: string;
-  perihal: string;
-  lampiran: string;
-  statusDisposisi: 'Belum Disposisi' | 'Sudah Disposisi';
-  disposisiKepada?: string;
-  catatanDisposisi?: string;
-  fileUrl?: string;
+export interface User {
+  username: string;
+  role: Role;
+  rantingId?: string; // If admin_ranting, specifies which ranting they belong to
 }
 
-export interface SuratKeluar {
+export interface Ranting {
   id: string;
-  nomorSurat: string; // e.g. 054/MWC-NU/A.I/V/2026
-  tanggal: string;
-  penerima: string;
-  perihal: string;
-  lampiran: string;
-  status: 'Draft' | 'Diverifikasi Sekretaris' | 'Disetujui Ketua' | 'Diarsipkan';
-  tandaTanganDigital?: string; // name / role signing
-  content: string;
-  tanggalDibuat: string;
-  dibuatOleh: string;
-  fileUrl?: string;
+  name: string; // e.g., "PRNU Bungah", "PRNU Sidorejo", etc.
+  village: string;
+  established: string;
 }
 
-export interface ArsipDokumen {
+export interface Pengurus {
   id: string;
-  nama: string;
-  kategori: 'SK' | 'AD/ART' | 'SOP' | 'Proposal' | 'LPJ' | 'Notulen' | 'Surat' | 'Lainnya';
-  tanggal: string;
-  tags: string[];
-  versi: string;
-  fileSize: string;
-  deskripsi: string;
-  fileUrl: string;
-  publicAccess: boolean;
+  name: string;
+  role: string; // e.g., "Syuriah", "Tanfidziyah", "Ketua", "Sekretaris"
+  category: 'MWC' | 'Ranting';
+  rantingId?: string;
+  phone: string;
+  email?: string;
+  kaderisasiStatus: string; // e.g., "MKNU", "PD-PKPNU", "Belum"
+  education: string; // e.g., "S1", "S2", "SMA", "Pesantren"
+  photoUrl?: string;
 }
 
-export interface TransaksiKeuangan {
+export interface Kader {
   id: string;
-  tanggal: string;
-  tipe: 'Pemasukan' | 'Pengeluaran';
-  kategori: 'Iuran' | 'Donasi' | 'Hibah' | 'Usaha' | 'Operasional' | 'Kegiatan' | 'Sosial' | 'Pendidikan';
-  deskripsi: string;
-  jumlah: number;
-  buktiUrl?: string;
-  status: 'Pending' | 'Disetujui' | 'Ditolak';
-  disetujuiOleh?: string;
-  auditTrail: string[]; // Logs of changes
-}
-
-export interface AnggotaPengurus {
-  id: string;
-  nomorAnggota: string; // NU-ID card format e.g. 35.15.02.XXXXX
-  nama: string;
-  nik: string;
-  tempatLahir: string;
-  tanggalLahir: string;
-  alamat: string;
-  pendidikan: string;
-  pekerjaan: string;
-  jabatanOrganisasi: string;
-  struktur: 'Pengurus Harian' | 'Lembaga' | 'Banom' | 'Ranting';
-  rantingId: string; // linked branch
-  riwayatJabatan: string[];
-  keahlian: string[];
-  fotoUrl: string;
-}
-
-export interface ProgramKerja {
-  id: string;
-  nama: string;
-  penanggungJawab: string; // Lembaga/Banom or Person
-  anggaran: number;
-  realisasiAnggaran: number;
-  target: string;
-  timelineMulai: string;
-  timelineSelesai: string;
-  status: 'Perencanaan' | 'Berjalan' | 'Selesai' | 'Tertunda';
-  progress: number; // 0 to 100
-  kegiatanTerbantu: string[]; // linked activity descriptions
-  fileUrl?: string;
-}
-
-export interface DokumentasiKegiatan {
-  id: string;
-  judul: string;
-  programKerjaId?: string; // linked program
-  tanggal: string;
-  deskripsi: string;
-  lokasi: string;
-  pengurusTerlibat: string[];
-  videoUrl?: string;
-  fotos: string[];
-}
-
-export interface LokasiGIS {
-  id: string;
-  nama: string;
-  tipe: 'Ranting' | 'Masjid' | 'Mushalla' | 'Madrasah' | 'Pesantren';
-  alamat: string;
+  name: string;
+  pob: string; // Place of birth
+  dob: string; // Date of birth
+  gender: 'Laki-laki' | 'Perempuan';
+  banom: 'IPNU' | 'IPPNU' | 'Ansor' | 'Fatayat' | 'Muslimat' | 'Banser' | 'Pagar Nusa' | 'Lainnya';
+  role: string; // Jabatan di Banom/Organisasi
   rantingId: string;
-  lat: number;
-  lng: number;
-  pimpinan?: string;
-  kontak?: string;
-  keterangan?: string;
+  phone: string;
+  joinYear: number;
+  photoUrl?: string;
 }
 
-export interface VotingMusyawarah {
+export interface Kegiatan {
   id: string;
-  pertanyaan: string;
-  pilihan: {
-    id: string;
-    teks: string;
-    suara: number;
-  }[];
-  status: 'Aktif' | 'Ditutup';
-  totalSuara: number;
-  waktuMulai: string;
-  waktuSelesai?: string;
+  title: string;
+  date: string;
+  location: string;
+  organizer: string; // e.g., "MWC NU", "LAZISNU", "PRNU Bungah"
+  targetGroup: string;
+  fundingSource: 'Koin S3' | 'Kas Jamiyah' | 'Donatur' | 'Sponsor';
+  budget: number;
+  status: 'Rencana' | 'Selesai';
+  imageUrl?: string;
+  description: string;
 }
 
-export interface AgendaMusyawarah {
+export interface TransparansiDana {
   id: string;
-  judul: string;
-  tanggal: string;
-  waktu: string;
-  status: 'Belum Mulai' | 'Berlangsung' | 'Selesai';
-  absensi: {
-    nama: string;
-    jabatan: string;
-    kehadiran: 'Hadir' | 'Izin' | 'Sakit';
-    waktuHadir?: string;
-  }[];
-  notulensi: string;
-  keputusanHasil: string;
-  voting?: VotingMusyawarah;
-  fileUrl?: string;
+  date: string;
+  type: 'Masuk' | 'Keluar';
+  category: 'Iuran Anggota' | 'Donasi Publik' | 'Operasional Kantor' | 'Bantuan Sosial' | 'Program Keagamaan' | 'Lainnya';
+  amount: number;
+  description: string;
+  pic: string; // Person In Charge
+  imageUrl?: string;
 }
 
-export interface BeritaArtikel {
+export interface KoinS3 {
   id: string;
-  judul: string;
-  ringkasan: string;
-  konten: string;
-  tanggal: string;
-  kategori: 'Kegiatan' | 'Opini' | 'Pengumuman' | 'Warta Aswaja';
-  penulis: string;
-  fotoUrl: string;
-  bacaCount: number;
+  month: string; // e.g., "2026-06", "2026-05"
+  rantingId: string;
+  amount: number;
+  distributionTarget: string; // e.g., "Santunan Anak Yatim", "Bantuan Sembako"
+  distributionAmount: number;
+  imageUrl?: string;
 }
+
+export interface Persuratan {
+  id: string;
+  letterNumber: string;
+  type: 'Masuk' | 'Keluar';
+  code: string; // Kode klasifikasi surat
+  senderOrRecipient: string;
+  date: string;
+  subject: string;
+  attachmentUrl?: string;
+  tembusan?: string;
+}
+
+export interface Usaha {
+  id: string;
+  name: string;
+  type: 'Toko' | 'Jasa' | 'Pertanian' | 'Kuliner' | 'Lainnya';
+  location: string;
+  manager: string; // Penggerak
+  status: 'Aktif' | 'Non-aktif';
+  revenue: number; // Omzet bulanan
+  imageUrl?: string;
+}
+
+export interface SaranaIbadah {
+  id: string;
+  name: string; // e.g., "Masjid Jami' Bungah"
+  type: 'Masjid' | 'Musholla';
+  takmir: string;
+  imam1: string;
+  imam2: string;
+  nuAffiliation: 'Milik NU' | 'Afiliasi NU' | 'Simpatisan';
+  landStatus: 'Wakaf NU' | 'Wakaf Pribadi' | 'Sertifikat Hak Milik';
+  address: string;
+  rantingId: string;
+  imageUrl?: string;
+}
+
+export interface SaranaPendidikan {
+  id: string;
+  name: string;
+  level: 'PAUD' | 'TK/RA' | 'MI' | 'MTs' | 'MA' | 'Madin' | 'TPQ' | 'Pesantren';
+  status: 'Swasta NU' | 'Negeri' | 'Swasta Non-NU';
+  principal: string;
+  studentCount: number;
+  phone: string;
+  condition: 'Baik' | 'Rusak Ringan' | 'Rusak Sedang' | 'Butuh Renovasi';
+  address: string;
+  rantingId: string;
+  imageUrl?: string;
+}
+
+export interface Berita {
+  id: string;
+  title: string;
+  category: 'Pengumuman' | 'Warta Jamiyah' | 'Dakwah' | 'Opini';
+  content: string; // Markdown supported content
+  imageUrl?: string;
+  date: string;
+  author: string;
+  driveUrl?: string;
+}
+
+export interface Dokumentasi {
+  id: string;
+  title: string;
+  type: 'Foto' | 'Video';
+  url: string;
+  date: string;
+  category: 'Kegiatan' | 'Rapat' | 'Pelantikan' | 'Harlah';
+  driveUrl?: string;
+}
+
+export interface Aspirasi {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  rantingId?: string;
+  subject: string;
+  message: string;
+  date: string;
+  status: 'Masuk' | 'Proses' | 'Selesai';
+  imageUrl?: string;
+}
+
+export type ModelType = 
+  | 'kader' 
+  | 'kegiatan' 
+  | 'keuangan' 
+  | 'koin_s3' 
+  | 'persuratan' 
+  | 'usaha' 
+  | 'sarana_ibadah' 
+  | 'sarana_pendidikan' 
+  | 'berita' 
+  | 'dokumentasi' 
+  | 'aspirasi'
+  | 'pengurus';
 
