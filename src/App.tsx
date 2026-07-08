@@ -114,18 +114,30 @@ export default function App() {
             fetchTableData('pengurus').catch(() => [])
           ]);
 
-          setKaderList(kader.length > 0 ? kader : mockKader);
-          setPengurusList(pengurus.length > 0 ? pengurus : mockPengurus);
-          setKegiatanList(kegiatan.length > 0 ? kegiatan : mockKegiatan);
-          setKasList(kas.length > 0 ? kas : mockTransparansiDana);
-          setKoinList(koin.length > 0 ? koin : mockKoinS3);
-          setSuratList(surat.length > 0 ? surat : mockPersuratan);
-          setUsahaList(usaha.length > 0 ? usaha : mockUsaha);
-          setSaranaIbadahList(saranaIbadah.length > 0 ? saranaIbadah : mockSaranaIbadah);
-          setSaranaPendidikanList(saranaPendidikan.length > 0 ? saranaPendidikan : mockSaranaPendidikan);
-          setBeritaList(berita.length > 0 ? berita : mockBerita);
-          setDokumentasiList(dokumentasi.length > 0 ? dokumentasi : mockDokumentasi);
-          setAspirasiList(aspirasi.length > 0 ? aspirasi : mockAspirasi);
+          const getStoredFallback = <T,>(key: string, defaultData: T[]): T[] => {
+            const stored = localStorage.getItem(`mwc_nu_${key}`);
+            if (stored) {
+              try {
+                return JSON.parse(stored);
+              } catch (e) {
+                console.error(`Error parsing fallback for ${key}`, e);
+              }
+            }
+            return defaultData;
+          };
+
+          setKaderList(kader.length > 0 ? kader : getStoredFallback('kader', mockKader));
+          setPengurusList(pengurus.length > 0 ? pengurus : getStoredFallback('pengurus', mockPengurus));
+          setKegiatanList(kegiatan.length > 0 ? kegiatan : getStoredFallback('kegiatan', mockKegiatan));
+          setKasList(kas.length > 0 ? kas : getStoredFallback('kas', mockTransparansiDana));
+          setKoinList(koin.length > 0 ? koin : getStoredFallback('koin_s3', mockKoinS3));
+          setSuratList(surat.length > 0 ? surat : getStoredFallback('persuratan', mockPersuratan));
+          setUsahaList(usaha.length > 0 ? usaha : getStoredFallback('usaha', mockUsaha));
+          setSaranaIbadahList(saranaIbadah.length > 0 ? saranaIbadah : getStoredFallback('sarana_ibadah', mockSaranaIbadah));
+          setSaranaPendidikanList(saranaPendidikan.length > 0 ? saranaPendidikan : getStoredFallback('sarana_pendidikan', mockSaranaPendidikan));
+          setBeritaList(berita.length > 0 ? berita : getStoredFallback('berita', mockBerita));
+          setDokumentasiList(dokumentasi.length > 0 ? dokumentasi : getStoredFallback('dokumentasi', mockDokumentasi));
+          setAspirasiList(aspirasi.length > 0 ? aspirasi : getStoredFallback('aspirasi', mockAspirasi));
           return;
         } catch (error) {
           console.error("Failed to load from Supabase, falling back to local storage", error);
