@@ -1,12 +1,43 @@
-name: Supabase Keep Alive
+name: Web NU Bungah CI/CD & Supabase Keep Alive
 
 on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
   schedule:
     - cron: '0 9 * * 1,4' # Otomatis berjalan Senin & Kamis jam 16:00 WIB
-  workflow_dispatch: # Tombol manual di UI GitHub
+  workflow_dispatch: # Memunculkan tombol manual di UI GitHub Actions
 
 jobs:
-  ping-database:
+  # ====================================================================
+  # JOB 1: Validasi Sistem & Build Aplikasi Web (Vite + Tailwind v4)
+  # ====================================================================
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        # Bendera --legacy-peer-deps mengunci pemasangan modul native biner Tailwind v4 tanpa konflik di Ubuntu Runner
+        run: npm ci --legacy-peer-deps
+
+      - name: Build Project
+        run: npm run build
+
+  # ====================================================================
+  # JOB 2: Otomatisasi Sinyal Supabase Agar Tidak Terkena Auto-Pause
+  # ====================================================================
+  supabase-keep-alive:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase REST API Directly
@@ -16,14 +47,13 @@ jobs:
         run: |
           node -e "
           if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-            console.error('❌ EROR: Kredensial tidak ditemukan di GitHub Secrets!');
-            process.exit(1);
+            console.log('⚠️ Peringatan: Kredensial Supabase tidak ditemukan di GitHub Secrets.');
+            console.log('Langkah ping dilewati. Ini wajar jika dipicu dari push kode biasa sebelum Secrets diisi.');
+            process.exit(0); 
           }
 
           async function ping() {
             console.log('Mengirim sinyal aktivitas ke REST API Supabase...');
-            
-            // Melakukan fetch langsung ke root endpoint PostgREST Supabase
             const response = await fetch(\`\${process.env.SUPABASE_URL}/rest/v1/\`, {
               method: 'GET',
               headers: {
@@ -33,7 +63,7 @@ jobs:
             });
 
             if (response.ok) {
-              console.log('✅ BERHASIL: Sinyal diterima. Proyek Supabase Anda aman dari auto-pause!');
+              console.log('✅ BERHASIL: Sinyal diterima. Proyek Supabase Anda tetap aktif!');
             } else {
               console.error('❌ GAGAL: Server merespons dengan status:', response.status);
               process.exit(1);
