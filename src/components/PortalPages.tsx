@@ -148,6 +148,46 @@ export default function PortalPages({
     return r ? r.name : 'Ranting NU';
   };
 
+  // Helper: Parse and Render Points/Pilar Penyaluran for Koin S3
+  const renderDistributionTarget = (target: string) => {
+    if (!target) return null;
+    if (target.trim().startsWith('[') && target.trim().endsWith(']')) {
+      try {
+        const parsed = JSON.parse(target);
+        if (Array.isArray(parsed)) {
+          return (
+            <ul className="space-y-2 list-none pl-0">
+              {parsed.map((item: any, idx: number) => (
+                <li key={idx} className="flex flex-col text-xs text-slate-700 leading-normal border-b border-slate-100 pb-1.5 last:border-0 last:pb-0">
+                  <div className="flex justify-between items-start gap-1">
+                    <span className="font-semibold text-slate-800 text-[11px]">{idx + 1}. {item.text || 'Pilar Penyaluran'}</span>
+                    <span className="text-[10px] font-bold text-amber-600 shrink-0 ml-auto">
+                      {item.amount ? formatRupiah(item.amount) : ''}
+                    </span>
+                  </div>
+                  {item.photoUrl && (
+                    <a 
+                      href={item.photoUrl} 
+                      target="_blank" 
+                      referrerPolicy="no-referrer"
+                      rel="noopener noreferrer" 
+                      className="inline-flex items-center space-x-1 text-[9px] text-tosca-700 hover:text-tosca-800 hover:underline mt-0.5 font-bold"
+                    >
+                      <span>🖼️ Lihat Foto Bukti</span>
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          );
+        }
+      } catch (e) {
+        // Fallback below
+      }
+    }
+    return <p className="text-xs text-slate-700 italic font-medium leading-relaxed">&ldquo;{target}&rdquo;</p>;
+  };
+
   // ==========================================
   // PAGE 0: HOME / BERANDA
   // ==========================================
@@ -1349,7 +1389,7 @@ export default function PortalPages({
 
                     <div className="bg-slate-50 rounded-xl p-3 space-y-1 border border-slate-100 mt-2">
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Tujuan & Sasaran Penyaluran</span>
-                      <p className="text-xs text-slate-700 italic font-medium leading-relaxed">&ldquo;{k.distributionTarget}&rdquo;</p>
+                      {renderDistributionTarget(k.distributionTarget)}
                     </div>
 
                     <div className="space-y-1">

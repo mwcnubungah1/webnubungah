@@ -122,12 +122,12 @@ export default function AdminCMS({
     }
 
     if (userRole === 'admin_lazisnu') {
-      if (model === 'koin_s3' || model === 'keuangan' || model === 'kegiatan') {
+      if (model === 'koin_s3') {
         return { allowed: true };
       }
       return { 
         allowed: false, 
-        reason: 'Akses Ditolak: Peran Admin LAZISNU hanya diperbolehkan mengelola data Koin S3, Transparansi Keuangan, dan Kegiatan terkait.' 
+        reason: 'Akses Ditolak: Peran Admin LAZISNU hanya diperbolehkan mengelola data Koin S3.' 
       };
     }
 
@@ -155,10 +155,61 @@ export default function AdminCMS({
     return { allowed: false, reason: 'Akses Ditolak: Silakan login terlebih dahulu.' };
   };
 
-  // Simulated CSV/Excel Exporter
+  // Real CSV/Excel Exporter with Microsoft Excel Compatibility
   const handleExport = (format: 'CSV' | 'EXCEL') => {
-    const filename = `Rekap_${activeModel}_${new Date().toISOString().slice(0, 10)}`;
-    setExportSuccess(`Berhasil mengekspor data ${activeModel.toUpperCase()} dalam format ${format} (${filename}.${format === 'CSV' ? 'csv' : 'xlsx'}) ke folder unduhan.`);
+    let dataToExport: any[] = [];
+    switch (activeModel) {
+      case 'kader': dataToExport = kaderList; break;
+      case 'kegiatan': dataToExport = kegiatanList; break;
+      case 'keuangan': dataToExport = kasList; break;
+      case 'koin_s3': dataToExport = koinList; break;
+      case 'persuratan': dataToExport = suratList; break;
+      case 'usaha': dataToExport = usahaList; break;
+      case 'sarana_ibadah': dataToExport = saranaIbadahList; break;
+      case 'sarana_pendidikan': dataToExport = saranaPendidikanList; break;
+      case 'berita': dataToExport = beritaList; break;
+      case 'dokumentasi': dataToExport = dokumentasiList; break;
+      case 'aspirasi': dataToExport = aspirasiList; break;
+      case 'pengurus': dataToExport = pengurusList; break;
+    }
+
+    if (!dataToExport || dataToExport.length === 0) {
+      alert("Tidak ada data untuk diekspor.");
+      return;
+    }
+
+    // Identify spreadsheet column headers
+    const headers = Object.keys(dataToExport[0]).filter(k => typeof dataToExport[0][k] !== 'object');
+    
+    // Create CSV rows
+    const csvRows = [];
+    csvRows.push(headers.join(';')); // Use semicolon for seamless Indonesian/European Excel auto-column split
+
+    for (const row of dataToExport) {
+      const values = headers.map(header => {
+        const val = row[header];
+        const stringVal = val === null || val === undefined ? '' : String(val);
+        const escaped = stringVal.replace(/"/g, '""');
+        return `"${escaped}"`;
+      });
+      csvRows.push(values.join(';'));
+    }
+
+    const csvContent = "\uFEFF" + csvRows.join("\n"); // Prepend UTF-8 BOM for Microsoft Excel character encoding
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    const extension = format === 'CSV' ? 'csv' : 'xlsx'; // excel natively parses csv with bom
+    const filename = `Rekap_${activeModel}_${new Date().toISOString().slice(0, 10)}.${extension}`;
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setExportSuccess(`Berhasil mengunduh rekap data ${activeModel.toUpperCase()} (${filename})!`);
     setTimeout(() => setExportSuccess(null), 5000);
   };
 
@@ -392,7 +443,7 @@ export default function AdminCMS({
           <p className="text-xs text-tosca-200 leading-relaxed max-w-2xl">
             Sistem Keamanan Berbasis Hak Akses (RBAC) diaktifkan. Anda masuk sebagai: <strong className="text-white capitalize">{userRole.replace('_', ' ')}</strong>.
             {userRole === 'admin_ranting' && ' Anda hanya diizinkan untuk melihat/mengedit data yang terikat dengan Ranting PRNU Bungah (Desa Bungah).'}
-            {userRole === 'admin_lazisnu' && ' Anda hanya memiliki izin mengelola data finansial, kegiatan, dan tasaruf Koin S3.'}
+            {userRole === 'admin_lazisnu' && ' Anda hanya memiliki izin mengelola data penyaluran Koin S3 LAZISNU.'}
             {userRole === 'super_admin' && ' Hak akses penuh: Anda berwenang melakukan operasi tulis/baca di semua Ranting desa.'}
           </p>
         </div>
@@ -419,7 +470,14 @@ export default function AdminCMS({
           { id: 'sarana_pendidikan', label: 'Sarana Sekolah' },
           { id: 'berita', label: 'Portal Berita' },
           { id: 'dokumentasi', label: 'Media Galeri' }
-        ] as const).map((tab) => (
+        ] as const)
+        .filter((tab) => {
+          if (userRole === 'admin_lazisnu') {
+            return tab.id === 'koin_s3';
+          }
+          return true;
+        })
+        .map((tab) => (
           <button
             key={tab.id}
             onClick={() => {

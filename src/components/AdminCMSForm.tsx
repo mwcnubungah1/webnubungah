@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Loader2, AlertCircle } from 'lucide-react';
+import { X, Upload, Loader2, AlertCircle, Plus } from 'lucide-react';
 import { 
   Role, Ranting, ModelType,
   Kader, Kegiatan, TransparansiDana, KoinS3, Persuratan, Usaha, 
@@ -54,6 +54,7 @@ export default function AdminCMSForm({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [points, setPoints] = useState<{ text: string; amount: number; photoUrl: string }[]>([]);
 
   // Initialize/Prefill Form State
   useEffect(() => {
@@ -75,6 +76,19 @@ export default function AdminCMSForm({
       }
       if (item) {
         setFormData({ ...item });
+        if (activeModel === 'koin_s3') {
+          const target = item.distributionTarget || '';
+          if (target.trim().startsWith('[') && target.trim().endsWith(']')) {
+            try {
+              const parsed = JSON.parse(target);
+              if (Array.isArray(parsed)) {
+                setPoints(parsed);
+                return;
+              }
+            } catch (e) {}
+          }
+          setPoints([{ text: target, amount: item.distributionAmount || 0, photoUrl: item.imageUrl || '' }]);
+        }
       }
     } else {
       const nowStr = new Date().toISOString().slice(0, 10);
@@ -94,7 +108,7 @@ export default function AdminCMSForm({
         },
         koin_s3: {
           month: nowStr.slice(0, 7), rantingId: 'r1', amount: 1500000,
-          distributionTarget: 'Bantuan Sosial Dhuafa', distributionAmount: 1000000, imageUrl: ''
+          distributionTarget: '', distributionAmount: 0, imageUrl: ''
         },
         aspirasi: {
           name: '', phone: '', email: '', rantingId: 'r1',
@@ -129,6 +143,9 @@ export default function AdminCMSForm({
         }
       };
       setFormData(defaultData[activeModel] || {});
+      if (activeModel === 'koin_s3') {
+        setPoints([{ text: '', amount: 0, photoUrl: '' }]);
+      }
     }
   }, [editItemId, activeModel]);
 
@@ -472,14 +489,154 @@ export default function AdminCMSForm({
               <input type="number" required value={formData.amount || 0} onChange={(e) => updateField('amount', parseFloat(e.target.value) || 0)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Alokasi Biaya Penyaluran (Rp) *</label>
-              <input type="number" required value={formData.distributionAmount || 0} onChange={(e) => updateField('distributionAmount', parseFloat(e.target.value) || 0)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" />
+              <label className="font-semibold text-slate-600">Alokasi Biaya Penyaluran (Rp) (Otomatis dari jumlah poin) *</label>
+              <input type="number" readOnly required value={formData.distributionAmount || 0} className="w-full bg-slate-100 border border-slate-200 rounded p-2 font-mono font-bold text-slate-750" />
             </div>
-            <div className="col-span-1 sm:col-span-2 space-y-1">
-              <label className="font-semibold text-slate-600">Sasaran Distribusi / Pilar Penyaluran *</label>
-              <input type="text" required value={formData.distributionTarget || ''} onChange={(e) => updateField('distributionTarget', e.target.value)} placeholder="Misal: Sembako Dhuafa & Beasiswa" className="w-full bg-white border border-slate-200 rounded p-2" />
+
+            <div className="col-span-1 sm:col-span-2 space-y-3 bg-slate-100/50 p-4 rounded-xl border border-slate-200 mt-2">
+              <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                <span className="font-bold text-slate-700 text-xs">Poin-Poin Sasaran & Pilar Penyaluran (Tasaruf)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newPoints = [...points, { text: '', amount: 0, photoUrl: '' }];
+                    setPoints(newPoints);
+                    updateField('distributionTarget', JSON.stringify(newPoints));
+                  }}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] flex items-center space-x-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Pilar Penyaluran</span>
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                {points.map((point, idx) => (
+                  <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 space-y-2 relative shadow-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-600 text-[10px]">Pilar Penyaluran #{idx + 1}</span>
+                      {points.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newPoints = points.filter((_, i) => i !== idx);
+                            setPoints(newPoints);
+                            updateField('distributionTarget', JSON.stringify(newPoints));
+                            const sum = newPoints.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+                            updateField('distributionAmount', sum);
+                            if (newPoints[0]?.photoUrl) {
+                              updateField('imageUrl', newPoints[0].photoUrl);
+                            }
+                          }}
+                          className="text-red-500 hover:text-red-700 text-[10px] font-bold"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                      <div className="space-y-1">
+                        <label className="font-semibold text-slate-500">Nama Penyaluran / Target *</label>
+                        <input
+                          type="text"
+                          required
+                          value={point.text}
+                          onChange={(e) => {
+                            const newPoints = [...points];
+                            newPoints[idx].text = e.target.value;
+                            setPoints(newPoints);
+                            updateField('distributionTarget', JSON.stringify(newPoints));
+                          }}
+                          placeholder="Misal: Beasiswa Rp. 300.000"
+                          className="w-full bg-white border border-slate-200 rounded p-1.5"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="font-semibold text-slate-500">Nominal Penyaluran (Rp) *</label>
+                        <input
+                          type="number"
+                          required
+                          value={point.amount}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            const newPoints = [...points];
+                            newPoints[idx].amount = val;
+                            setPoints(newPoints);
+                            updateField('distributionTarget', JSON.stringify(newPoints));
+                            const sum = newPoints.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+                            updateField('distributionAmount', sum);
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded p-1.5 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1.5 border-t border-slate-100">
+                      <label className="font-semibold text-slate-500 text-[10px]">Foto Bukti Penyaluran (Optional)</label>
+                      <div className="flex items-center space-x-2">
+                        {point.photoUrl && (
+                          <img
+                            src={point.photoUrl}
+                            referrerPolicy="no-referrer"
+                            className="w-8 h-8 object-cover rounded border border-slate-200 shrink-0"
+                            alt="Bukti"
+                          />
+                        )}
+                        <input
+                          type="text"
+                          value={point.photoUrl}
+                          onChange={(e) => {
+                            const newPoints = [...points];
+                            newPoints[idx].photoUrl = e.target.value;
+                            setPoints(newPoints);
+                            updateField('distributionTarget', JSON.stringify(newPoints));
+                            if (idx === 0) {
+                              updateField('imageUrl', e.target.value);
+                            }
+                          }}
+                          placeholder="Tautan URL foto bukti"
+                          className="flex-1 bg-white border border-slate-200 rounded p-1.5 text-[10px] font-mono"
+                        />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          id={`point-file-${idx}`}
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setUploading(true);
+                              try {
+                                const secureUrl = await uploadToCloudinary(file);
+                                const newPoints = [...points];
+                                newPoints[idx].photoUrl = secureUrl;
+                                setPoints(newPoints);
+                                updateField('distributionTarget', JSON.stringify(newPoints));
+                                if (idx === 0) {
+                                  updateField('imageUrl', secureUrl);
+                                }
+                              } catch (err) {
+                                console.error(err);
+                                alert("Gagal mengunggah gambar bukti.");
+                              } finally {
+                                setUploading(false);
+                              }
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor={`point-file-${idx}`}
+                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-bold cursor-pointer shrink-0 border border-slate-200"
+                        >
+                          Upload Foto
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            {renderUploader('imageUrl')}
           </div>
         )}
 

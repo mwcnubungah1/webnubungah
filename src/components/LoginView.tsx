@@ -21,9 +21,16 @@ export default function LoginView({
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check for maghfurmunif@gmail.com
     if (email === 'maghfurmunif@gmail.com' && password === 'mwc123') {
       setUserRole('super_admin');
+      setSelectedRantingId('mwc');
+      setSuccess(true);
+      setError(null);
+      setTimeout(() => {
+        setActiveTab('admin');
+      }, 1500);
+    } else if (email === 'ahmadazkia@gmail.com' && password === 'nubungah2026') {
+      setUserRole('admin_lazisnu');
       setSelectedRantingId('mwc');
       setSuccess(true);
       setError(null);

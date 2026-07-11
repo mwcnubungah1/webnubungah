@@ -62,6 +62,19 @@ export default function AdminCMSDatatable({
     return r ? r.name : 'Ranting NU';
   };
 
+  const getDistributionTargetLabel = (target: string) => {
+    if (!target) return '';
+    if (target.trim().startsWith('[') && target.trim().endsWith(']')) {
+      try {
+        const parsed = JSON.parse(target);
+        if (Array.isArray(parsed)) {
+          return `${parsed.length} Pilar: ${parsed.map((p: any) => p.text).filter(Boolean).join(', ')}`;
+        }
+      } catch (e) {}
+    }
+    return target;
+  };
+
   // Shared Actions Renderer
   const renderActions = (id: string) => {
     return (
@@ -256,7 +269,7 @@ export default function AdminCMSDatatable({
                 <td className="px-5 py-3.5 text-slate-500 italic max-w-[150px] truncate">
                   <div className="flex items-center space-x-2">
                     {item.imageUrl && <img src={item.imageUrl} referrerPolicy="no-referrer" className="w-6 h-6 object-cover rounded-md shrink-0" />}
-                    <span>{item.distributionTarget}</span>
+                    <span>{getDistributionTargetLabel(item.distributionTarget)}</span>
                   </div>
                 </td>
                 <td className="px-5 py-3.5 font-bold text-amber-600 text-right">{formatRupiah(item.distributionAmount)}</td>
