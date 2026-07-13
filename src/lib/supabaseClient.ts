@@ -98,11 +98,11 @@ export async function insertTableData(model: string, item: any): Promise<any> {
   const table = getTableName(model);
   const dbItem = camelToSnake(item);
 
-  // For SERIAL primary keys, strip mock string/prefixed IDs so Postgres can auto-generate
-  if (typeof dbItem.id === 'string' && (dbItem.id.includes('-') || isNaN(Number(dbItem.id)))) {
-    delete dbItem.id;
-  } else if (dbItem.id !== undefined) {
-    dbItem.id = Number(dbItem.id);
+  // All our tables use TEXT PRIMARY KEY, so we must keep the string ID intact.
+  if (dbItem.id === undefined || dbItem.id === null) {
+    dbItem.id = `${table.slice(0, 2)}-${Date.now()}`;
+  } else {
+    dbItem.id = String(dbItem.id);
   }
 
   const { data, error } = await supabase

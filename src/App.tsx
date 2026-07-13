@@ -82,6 +82,47 @@ export default function App() {
   const [dokumentasiList, setDokumentasiList] = useState<Dokumentasi[]>([]);
   const [aspirasiList, setAspirasiList] = useState<Aspirasi[]>([]);
 
+  // Listen to Supabase Auth state changes to keep userRole in sync
+  useEffect(() => {
+    if (isSupabaseConfigured && supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session && session.user) {
+          const email = session.user.email;
+          let role: Role = 'guest';
+          if (email === 'maghfurmunif@gmail.com') {
+            role = 'super_admin';
+          } else if (email === 'ahmadazkia@gmail.com') {
+            role = 'admin_lazisnu';
+          } else if (session.user.user_metadata?.role) {
+            role = session.user.user_metadata.role;
+          }
+          setUserRole(role);
+        }
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session && session.user) {
+          const email = session.user.email;
+          let role: Role = 'guest';
+          if (email === 'maghfurmunif@gmail.com') {
+            role = 'super_admin';
+          } else if (email === 'ahmadazkia@gmail.com') {
+            role = 'admin_lazisnu';
+          } else if (session.user.user_metadata?.role) {
+            role = session.user.user_metadata.role;
+          }
+          setUserRole(role);
+        } else {
+          setUserRole('guest');
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, []);
+
   // Initialize DB from Supabase or LocalStorage/mockData
   useEffect(() => {
     async function initData() {
@@ -101,17 +142,17 @@ export default function App() {
             aspirasi,
             pengurus
           ] = await Promise.all([
-            fetchTableData('kader'),
-            fetchTableData('kegiatan'),
-            fetchTableData('keuangan'),
-            fetchTableData('koin_s3'),
-            fetchTableData('persuratan'),
-            fetchTableData('usaha'),
-            fetchTableData('sarana_ibadah'),
-            fetchTableData('sarana_pendidikan'),
-            fetchTableData('berita'),
-            fetchTableData('dokumentasi'),
-            fetchTableData('aspirasi'),
+            fetchTableData('kader').catch(() => []),
+            fetchTableData('kegiatan').catch(() => []),
+            fetchTableData('keuangan').catch(() => []),
+            fetchTableData('koin_s3').catch(() => []),
+            fetchTableData('persuratan').catch(() => []),
+            fetchTableData('usaha').catch(() => []),
+            fetchTableData('sarana_ibadah').catch(() => []),
+            fetchTableData('sarana_pendidikan').catch(() => []),
+            fetchTableData('berita').catch(() => []),
+            fetchTableData('dokumentasi').catch(() => []),
+            fetchTableData('aspirasi').catch(() => []),
             fetchTableData('pengurus').catch(() => [])
           ]);
 
@@ -176,7 +217,7 @@ export default function App() {
     }
 
     initData();
-  }, []);
+  }, [userRole]);
 
   // Sync state back to LocalStorage on changes (only when not using Supabase to save storage space/avoid race conditions, or as redundancy)
   useEffect(() => {
