@@ -100,33 +100,52 @@ export default function AdminCMSDatatable({
   switch (activeModel) {
     case 'kader':
       return (
-        <table className="w-full text-left border-collapse text-xs">
+        <table className="w-full text-left border-collapse text-xs min-w-[1000px]">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold">
-              <th className="px-5 py-3">Nama</th>
-              <th className="px-5 py-3">Ranting Desa</th>
-              <th className="px-5 py-3">Banom</th>
-              <th className="px-5 py-3">Jabatan Pokok</th>
-              <th className="px-5 py-3">No. Telp</th>
-              <th className="px-5 py-3 text-right">Aksi</th>
+              <th className="px-4 py-3">Nama</th>
+              <th className="px-4 py-3">TTL</th>
+              <th className="px-4 py-3">Unsur</th>
+              <th className="px-4 py-3">Jabatan</th>
+              <th className="px-4 py-3">Alamat</th>
+              <th className="px-4 py-3">Ranting</th>
+              <th className="px-4 py-3">No. HP / WA</th>
+              <th className="px-4 py-3">L/P</th>
+              <th className="px-4 py-3">Angkatan</th>
+              <th className="px-4 py-3 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {kaderList.map(item => (
               <tr key={item.id} className="hover:bg-slate-50/50">
-                <td className="px-5 py-3.5 font-bold text-slate-800 flex items-center space-x-2">
-                  {item.photoUrl && <img src={item.photoUrl} referrerPolicy="no-referrer" className="w-6 h-6 object-cover rounded-md shrink-0" />}
+                <td className="px-4 py-3 font-bold text-slate-800 flex items-center space-x-2">
+                  <img 
+                    src={item.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
+                    referrerPolicy="no-referrer" 
+                    className="w-7 h-7 object-cover rounded-md shrink-0 border border-slate-100 bg-slate-50" 
+                    alt={item.name}
+                  />
                   <span>{item.name}</span>
                 </td>
-                <td className="px-5 py-3.5 text-slate-600">{getRantingName(item.rantingId)}</td>
-                <td className="px-5 py-3.5">
-                  <span className="px-2 py-0.5 bg-tosca-50 text-tosca-700 font-bold rounded text-[10px]">
-                    {item.banom}
+                <td className="px-4 py-3 text-slate-600 font-mono">
+                  {item.pob && item.dob ? `${item.pob}, ${item.dob}` : (item.pob || item.dob || '-')}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="px-2 py-0.5 bg-tosca-50 text-tosca-700 font-semibold rounded text-[10px] block w-fit">
+                    {item.unsur || item.banom}
                   </span>
                 </td>
-                <td className="px-5 py-3.5 text-slate-500 font-medium italic">{item.role}</td>
-                <td className="px-5 py-3.5 font-mono text-slate-500">{item.phone}</td>
-                <td className="px-5 py-3.5 text-right">{renderActions(item.id)}</td>
+                <td className="px-4 py-3 text-slate-600 font-medium">{item.role}</td>
+                <td className="px-4 py-3 text-slate-500 truncate max-w-[150px]" title={item.address}>{item.address || '-'}</td>
+                <td className="px-4 py-3 text-slate-600">{getRantingName(item.rantingId)}</td>
+                <td className="px-4 py-3 font-mono text-slate-500">{item.phone}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${item.gender === 'Perempuan' ? 'bg-pink-50 text-pink-700' : 'bg-blue-50 text-blue-700'}`}>
+                    {item.gender === 'Perempuan' ? 'P' : 'L'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 font-mono font-bold text-tosca-700">{item.angkatan || item.joinYear || '-'}</td>
+                <td className="px-4 py-3 text-right">{renderActions(item.id)}</td>
               </tr>
             ))}
           </tbody>
@@ -139,6 +158,7 @@ export default function AdminCMSDatatable({
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold">
               <th className="px-5 py-3">Nama</th>
+              <th className="px-5 py-3">Struktur / Banom / Lembaga</th>
               <th className="px-5 py-3">Jabatan</th>
               <th className="px-5 py-3">Tingkatan</th>
               <th className="px-5 py-3">Kaderisasi</th>
@@ -153,7 +173,24 @@ export default function AdminCMSDatatable({
                   <img src={item.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} referrerPolicy="no-referrer" className="w-6 h-6 object-cover rounded-md shrink-0 border border-slate-200" />
                   <span>{item.name}</span>
                 </td>
-                <td className="px-5 py-3.5 text-slate-600">{item.role}</td>
+                <td className="px-5 py-3.5 text-slate-600">
+                  <div className="flex flex-col space-y-1">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
+                      item.groupType === 'Harian' ? 'bg-slate-100 text-slate-700' :
+                      item.groupType === 'Banom' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                      item.groupType === 'Lembaga' ? 'bg-teal-50 text-teal-850 border border-teal-200' :
+                      'bg-slate-100 text-slate-700'
+                    }`}>
+                      {item.groupType === 'Harian' ? 'Pengurus Harian' : item.groupType === 'Banom' ? 'Banom' : item.groupType === 'Lembaga' ? 'Lembaga' : 'Pengurus Harian'}
+                    </span>
+                    {item.groupName && (
+                      <span className="text-[10px] text-slate-500 font-bold ml-0.5">
+                        {item.groupName}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-5 py-3.5 text-slate-600 font-medium">{item.role}</td>
                 <td className="px-5 py-3.5 text-slate-600">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${item.category === 'MWC' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}`}>
                     {item.category === 'MWC' ? 'MWC' : `Ranting (${getRantingName(item.rantingId)})`}

@@ -9,8 +9,10 @@ import {
   Eye,
   Info,
   CheckCircle2,
-  Lock
+  Lock,
+  Upload
 } from 'lucide-react';
+import { parseCSVLine, parseBirth, mapUnsurToBanom, mapRantingToId, mapAngkatanToYear } from '../data/mockData';
 import { 
   Kader, 
   Kegiatan, 
@@ -211,6 +213,139 @@ export default function AdminCMS({
 
     setExportSuccess(`Berhasil mengunduh rekap data ${activeModel.toUpperCase()} (${filename})!`);
     setTimeout(() => setExportSuccess(null), 5000);
+  };
+
+  // CSV Bulk Importer for Kader Data
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const check = checkWritePermission('kader');
+    if (!check.allowed) {
+      setValidationError(check.reason);
+      setTimeout(() => setValidationError(null), 6000);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      if (!text) {
+        setValidationError("Gagal membaca file CSV.");
+        return;
+      }
+
+      try {
+        const lines = text.split('\n');
+        const importedKaders: Kader[] = [];
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          const row = parseCSVLine(line);
+          // CSV must have at least columns up to column index 8 (JK)
+          if (row.length < 8) {
+            failCount++;
+            continue;
+          }
+
+          const no = row[0] || String(Date.now() + i);
+          const nama = row[1];
+          if (!nama || nama === 'NAMA') {
+            // Skip headers or empty names
+            continue;
+          }
+
+          const birthCol = row[2] || '';
+          const unsur = row[3] || 'Lainnya';
+          const jabatan = row[4] || '-';
+          const alamat = row[5] || '';
+          const ranting = row[6] || 'mwc';
+          const noTelp = row[7] || '';
+          const jk = row[8] || 'L';
+          const mwcNu = row[9] || '';
+          const angkatan = row[10] || '';
+
+          const { pob, dob } = parseBirth(birthCol);
+          const gender = jk.toUpperCase() === 'P' ? 'Perempuan' : 'Laki-laki';
+          const banom = mapUnsurToBanom(unsur);
+          const role = (jabatan && jabatan !== '-') ? jabatan : (unsur || 'Kader');
+          const rantingId = mapRantingToId(ranting);
+          const phone = noTelp === '-' ? '' : (noTelp.startsWith('8') ? '0' + noTelp : noTelp);
+          const joinYear = mapAngkatanToYear(angkatan);
+
+          const localId = `k-${Date.now()}_${i}`;
+          
+          const newKader: Kader = {
+            id: localId,
+            name: nama,
+            pob,
+            dob,
+            gender,
+            banom,
+            role,
+            rantingId,
+            phone,
+            joinYear,
+            unsur,
+            address: alamat,
+            angkatan
+          };
+
+          importedKaders.push(newKader);
+        }
+
+        if (importedKaders.length === 0) {
+          setValidationError("Tidak ada data kader valid yang ditemukan di file CSV.");
+          return;
+        }
+
+        // Now save imported kaders
+        const savedKaders: Kader[] = [];
+        if (isSupabaseConfigured) {
+          setSuccessMessage(`Sedang mengimpor ${importedKaders.length} kader ke Supabase...`);
+          for (const item of importedKaders) {
+            try {
+              const saved = await insertTableData('kader', item);
+              savedKaders.push(saved);
+              successCount++;
+            } catch (err) {
+              console.error("Supabase write failed for", item.name, err);
+              // Fallback to local
+              savedKaders.push(item);
+              successCount++;
+            }
+          }
+        } else {
+          // Local storage only
+          savedKaders.push(...importedKaders);
+          successCount = importedKaders.length;
+        }
+
+        const updatedList = [...savedKaders, ...kaderList];
+        setKaderList(updatedList);
+        localStorage.setItem('mwc_nu_kader', JSON.stringify(updatedList));
+
+        setSuccessMessage(`Berhasil mengimpor ${successCount} data kader! ${failCount > 0 ? `(${failCount} baris gagal)` : ''}`);
+        setTimeout(() => setSuccessMessage(null), 8000);
+
+      } catch (err: any) {
+        setValidationError(`Gagal memproses file CSV: ${err.message}`);
+        setTimeout(() => setValidationError(null), 6000);
+      }
+    };
+
+    reader.onerror = () => {
+      setValidationError("Gagal mengunggah file.");
+      setTimeout(() => setValidationError(null), 6000);
+    };
+
+    reader.readAsText(file);
+    // Reset file input value
+    e.target.value = '';
   };
 
   // Delete Action handler
@@ -542,6 +677,19 @@ export default function AdminCMS({
               <Plus className="w-4 h-4" />
               <span>Tambah Entri Baru</span>
             </button>
+
+            {activeModel === 'kader' && (
+              <label className="cursor-pointer px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs flex items-center space-x-1.5 transition-colors">
+                <Upload className="w-4 h-4 text-slate-500" />
+                <span>Unggah CSV Kader</span>
+                <input 
+                  type="file" 
+                  accept=".csv" 
+                  className="hidden" 
+                  onChange={handleCSVUpload}
+                />
+              </label>
+            )}
 
             <span className="text-xs text-slate-400 font-medium">
               Aktif Mengelola: <strong className="text-slate-700 uppercase">{activeModel.replace('_', ' ')}</strong>

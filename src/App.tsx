@@ -68,6 +68,7 @@ export default function App() {
   const [selectedRantingId, setSelectedRantingId] = useState<string>('mwc');
 
   // Database collections with LocalStorage/Supabase persistence
+  const [rantings, setRantings] = useState<Ranting[]>([]);
   const [kaderList, setKaderList] = useState<Kader[]>([]);
   const [pengurusList, setPengurusList] = useState<Pengurus[]>([]);
   const [kegiatanList, setKegiatanList] = useState<Kegiatan[]>([]);
@@ -138,6 +139,7 @@ export default function App() {
           setBeritaList(berita.length > 0 ? berita : getStoredFallback('berita', mockBerita));
           setDokumentasiList(dokumentasi.length > 0 ? dokumentasi : getStoredFallback('dokumentasi', mockDokumentasi));
           setAspirasiList(aspirasi.length > 0 ? aspirasi : getStoredFallback('aspirasi', mockAspirasi));
+          setRantings(getStoredFallback('rantings', mockRantings));
           return;
         } catch (error) {
           console.error("Failed to load from Supabase, falling back to local storage", error);
@@ -170,6 +172,7 @@ export default function App() {
       setBeritaList(loadOrInit('berita', mockBerita));
       setDokumentasiList(loadOrInit('dokumentasi', mockDokumentasi));
       setAspirasiList(loadOrInit('aspirasi', mockAspirasi));
+      setRantings(loadOrInit('rantings', mockRantings));
     }
 
     initData();
@@ -212,6 +215,9 @@ export default function App() {
   useEffect(() => {
     if (aspirasiList.length > 0) localStorage.setItem('mwc_nu_aspirasi', JSON.stringify(aspirasiList));
   }, [aspirasiList]);
+  useEffect(() => {
+    if (rantings.length > 0) localStorage.setItem('mwc_nu_rantings', JSON.stringify(rantings));
+  }, [rantings]);
 
   // Handler: Add Public Aspiration
   const handleAddAspirasi = async (newAspirasi: Omit<Aspirasi, 'id' | 'date' | 'status'>) => {
@@ -316,7 +322,7 @@ export default function App() {
             userRole !== 'guest' ? (
               <AdminCMS 
                 userRole={userRole}
-                rantings={mockRantings}
+                rantings={rantings}
                 kaderList={kaderList}
                 setKaderList={setKaderList}
                 kegiatanList={kegiatanList}
@@ -360,18 +366,25 @@ export default function App() {
             <PortalPages 
               activeTab={activeTab}
               setActiveTab={setActiveTab}
-              rantings={mockRantings}
+              rantings={rantings}
+              setRantings={setRantings}
+              userRole={userRole}
               pengurusList={pengurusList}
               kaderList={kaderList}
+              setKaderList={setKaderList}
               kegiatanList={kegiatanList}
               kasList={kasList}
               koinList={koinList}
               suratList={suratList}
+              setSuratList={setSuratList}
               usahaList={usahaList}
               saranaIbadahList={saranaIbadahList}
+              setSaranaIbadahList={setSaranaIbadahList}
               saranaPendidikanList={saranaPendidikanList}
+              setSaranaPendidikanList={setSaranaPendidikanList}
               beritaList={beritaList}
               dokumentasiList={dokumentasiList}
+              setDokumentasiList={setDokumentasiList}
               aspirasiList={aspirasiList}
               addAspirasi={handleAddAspirasi}
             />

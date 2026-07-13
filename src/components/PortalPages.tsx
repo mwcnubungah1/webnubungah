@@ -27,7 +27,9 @@ import {
   ExternalLink,
   Map,
   Sparkles,
-  Download
+  Download,
+  Upload,
+  Trash2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -60,24 +62,34 @@ import {
   SaranaPendidikan, 
   Berita, 
   Dokumentasi, 
-  Aspirasi 
+  Aspirasi,
+  Role
 } from '../types';
+import { isCloudinaryConfigured, uploadToCloudinary } from '../lib/cloudinaryClient';
+import { parseCSVLine, parseBirth, mapUnsurToBanom, mapRantingToId, mapAngkatanToYear } from '../data/mockData';
 
 interface PortalPagesProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   rantings: Ranting[];
+  setRantings?: React.Dispatch<React.SetStateAction<Ranting[]>>;
+  userRole?: Role;
   pengurusList: Pengurus[];
   kaderList: Kader[];
+  setKaderList?: React.Dispatch<React.SetStateAction<Kader[]>>;
   kegiatanList: Kegiatan[];
   kasList: TransparansiDana[];
   koinList: KoinS3[];
   suratList: Persuratan[];
+  setSuratList?: React.Dispatch<React.SetStateAction<Persuratan[]>>;
   usahaList: Usaha[];
   saranaIbadahList: SaranaIbadah[];
+  setSaranaIbadahList?: React.Dispatch<React.SetStateAction<SaranaIbadah[]>>;
   saranaPendidikanList: SaranaPendidikan[];
+  setSaranaPendidikanList?: React.Dispatch<React.SetStateAction<SaranaPendidikan[]>>;
   beritaList: Berita[];
   dokumentasiList: Dokumentasi[];
+  setDokumentasiList?: React.Dispatch<React.SetStateAction<Dokumentasi[]>>;
   aspirasiList: Aspirasi[];
   addAspirasi: (aspirasi: Omit<Aspirasi, 'id' | 'date' | 'status'>) => void;
 }
@@ -86,17 +98,24 @@ export default function PortalPages({
   activeTab,
   setActiveTab,
   rantings,
+  setRantings,
+  userRole = 'guest',
   pengurusList,
   kaderList,
+  setKaderList,
   kegiatanList,
   kasList,
   koinList,
   suratList,
+  setSuratList,
   usahaList,
   saranaIbadahList,
+  setSaranaIbadahList,
   saranaPendidikanList,
+  setSaranaPendidikanList,
   beritaList,
   dokumentasiList,
+  setDokumentasiList,
   aspirasiList,
   addAspirasi
 }: PortalPagesProps) {
@@ -104,9 +123,383 @@ export default function PortalPages({
   // For viewing full news
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
 
+  // For viewing details of documentation (multiple photos)
+  const [selectedDokumentasi, setSelectedDokumentasi] = useState<Dokumentasi | null>(null);
+  const [activePhotoIndex, setActivePhotoIndex] = useState<number>(0);
+  const [newPhotoInput, setNewPhotoInput] = useState<string>('');
+
+  // States for Ranting Profile photo upload modal
+  const [showRantingPhotoModal, setShowRantingPhotoModal] = useState(false);
+  const [tempPhotoUrl, setTempPhotoUrl] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadPhotoError, setUploadPhotoError] = useState<string | null>(null);
+
+  const handleFileUpload = async (file: File) => {
+    try {
+      setUploadingPhoto(true);
+      setUploadPhotoError(null);
+      const secureUrl = await uploadToCloudinary(file);
+      setTempPhotoUrl(secureUrl);
+    } catch (err: any) {
+      setUploadPhotoError(err.message || 'Gagal mengunggah gambar.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleSaveRantingPhoto = (newUrl: string) => {
+    if (setRantings && selectedRantingProfileId) {
+      setRantings(prev => prev.map(r => r.id === selectedRantingProfileId ? { ...r, imageUrl: newUrl } : r));
+    }
+    setShowRantingPhotoModal(false);
+  };
+
+  // States and handlers for SK Upload (Sinergi Data Terkoneksi)
+  const [showSKUploadModal, setShowSKUploadModal] = useState(false);
+  const [skNumber, setSkNumber] = useState('');
+  const [skPeriod, setSkPeriod] = useState('');
+  const [skFileUrl, setSkFileUrl] = useState('');
+  const [skIsLatest, setSkIsLatest] = useState(true);
+  const [uploadingSK, setUploadingSK] = useState(false);
+  const [uploadSKError, setUploadSKError] = useState<string | null>(null);
+
+  const handleSKFileUpload = async (file: File) => {
+    try {
+      setUploadingSK(true);
+      setUploadSKError(null);
+      const secureUrl = await uploadToCloudinary(file);
+      setSkFileUrl(secureUrl);
+    } catch (err: any) {
+      setUploadSKError(err.message || 'Gagal mengunggah SK.');
+    } finally {
+      setUploadingSK(false);
+    }
+  };
+
+  const handleSaveSK = () => {
+    if (!skNumber || !skPeriod || !skFileUrl) {
+      setUploadSKError('Harap lengkapi semua kolom.');
+      return;
+    }
+    
+    if (setRantings && selectedRantingProfileId) {
+      setRantings(prev => prev.map(r => {
+        if (r.id !== selectedRantingProfileId) return r;
+        
+        const currentSKs = r.skDocs || [];
+        const updatedSKs = skIsLatest 
+          ? currentSKs.map(sk => ({ ...sk, isLatest: false }))
+          : currentSKs;
+          
+        const newSK = {
+          id: 'sk-' + Date.now(),
+          number: skNumber,
+          period: skPeriod,
+          fileUrl: skFileUrl,
+          uploadDate: new Date().toISOString().split('T')[0],
+          isLatest: skIsLatest
+        };
+        
+        return {
+          ...r,
+          skDocs: [newSK, ...updatedSKs]
+        };
+      }));
+    }
+    
+    // Reset form
+    setSkNumber('');
+    setSkPeriod('');
+    setSkFileUrl('');
+    setSkIsLatest(true);
+    setUploadSKError(null);
+    setShowSKUploadModal(false);
+  };
+
+  const handleDeleteSK = (skId: string) => {
+    if (window.confirm('Apakah Anda yakin ingin menghapus SK ini?') && setRantings && selectedRantingProfileId) {
+      setRantings(prev => prev.map(r => {
+        if (r.id !== selectedRantingProfileId) return r;
+        const filteredSKs = (r.skDocs || []).filter(sk => sk.id !== skId);
+        if (filteredSKs.length > 0 && !filteredSKs.some(sk => sk.isLatest)) {
+          filteredSKs[0].isLatest = true;
+        }
+        return {
+          ...r,
+          skDocs: filteredSKs
+        };
+      }));
+    }
+  };
+
+  // CSV Template and Bulk Importer handlers (Kader & Profil Ranting)
+  const [csvKaderMessage, setCsvKaderMessage] = useState<string | null>(null);
+  const [csvKaderError, setCsvKaderError] = useState<string | null>(null);
+  const [csvRantingMessage, setCsvRantingMessage] = useState<string | null>(null);
+  const [csvRantingError, setCsvRantingError] = useState<string | null>(null);
+
+  const downloadKaderCSVTemplate = () => {
+    const headers = ["NO", "NAMA LENGKAP", "TEMPAT TANGGAL LAHIR (Tempat, DD-MM-YYYY)", "UNSUR/BANOM/LEMBAGA", "JABATAN", "ALAMAT", "RANTING (NAMA DESA)", "NO TELEPON", "JENIS KELAMIN (L/P)", "MWCNU", "ANGKATAN/TAHUN"];
+    const sampleRow1 = ["1", "Ahmad Fauzi", "Gresik, 12-05-1992", "GP Ansor", "Ketua", "Jl. Raya Bungah No. 10", "Bungah", "08123456789", "L", "MWCNU Bungah", "2024"];
+    const sampleRow2 = ["2", "Siti Aminah", "Gresik, 20-10-1995", "Fatayat NU", "Sekretaris", "Jl. Melati No. 4, Sidokumpul", "Sidokumpul", "08576543210", "P", "MWCNU Bungah", "PKPNU II"];
+    
+    const csvRows = [
+      headers.join(';'),
+      sampleRow1.join(';'),
+      sampleRow2.join(';'),
+    ];
+    
+    const csvContent = "\uFEFF" + csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "Template_Unggah_Kader_NU.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadRantingCSVTemplate = () => {
+    const headers = ["ID RANTING (Kosongkan jika baru)", "NAMA RANTING", "DESA / WILAYAH", "TANGGAL BERDIRI (DD-MM-YYYY)", "ALAMAT KANTOR", "TELEPON", "EMAIL", "BANOM AKTIF (Pisah dengan koma)", "LEMBAGA AKTIF (Pisah dengan koma)"];
+    const sampleRow1 = ["r1", "PRNU Bungah", "Bungah", "31-01-1926", "Jl. Kiai Gede No. 4, Bungah", "08123456789", "bungah@mwcnubungah.or.id", "Muslimat NU, GP Ansor, Fatayat NU, IPNU, IPPNU, Banser", "LAZISNU, LTMNU, LDNU"];
+    const sampleRow2 = ["r2", "PRNU Sidorejo", "Sidorejo", "15-08-1950", "Jl. KH. Wachid Hasyim No. 12", "08576543210", "sidorejo@mwcnubungah.or.id", "Muslimat NU, GP Ansor, IPNU, IPPNU", "LAZISNU"];
+    
+    const csvRows = [
+      headers.join(';'),
+      sampleRow1.join(';'),
+      sampleRow2.join(';'),
+    ];
+    
+    const csvContent = "\uFEFF" + csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "Template_Unggah_Profil_Ranting.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleKaderCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) {
+        setCsvKaderError("Gagal membaca file CSV.");
+        return;
+      }
+
+      try {
+        const lines = text.split('\n');
+        const importedKaders: Kader[] = [];
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          const row = parseCSVLine(line);
+          if (row.length < 8) {
+            failCount++;
+            continue;
+          }
+
+          const nama = row[1];
+          if (!nama || nama === 'NAMA LENGKAP' || nama === 'NAMA') continue;
+
+          const birthCol = row[2] || '';
+          const unsur = row[3] || 'Lainnya';
+          const jabatan = row[4] || '-';
+          const alamat = row[5] || '';
+          const ranting = row[6] || 'mwc';
+          const noTelp = row[7] || '';
+          const jk = row[8] || 'L';
+          const angkatan = row[10] || '';
+
+          const { pob, dob } = parseBirth(birthCol);
+          const gender = jk.toUpperCase() === 'P' ? 'Perempuan' : 'Laki-laki';
+          const banom = mapUnsurToBanom(unsur);
+          const role = (jabatan && jabatan !== '-') ? jabatan : (unsur || 'Kader');
+          const rantingId = mapRantingToId(ranting);
+          const phone = noTelp === '-' ? '' : (noTelp.startsWith('8') ? '0' + noTelp : noTelp);
+          const joinYear = mapAngkatanToYear(angkatan);
+
+          const localId = `k-${Date.now()}_${i}`;
+          
+          const newKader: Kader = {
+            id: localId,
+            name: nama,
+            pob,
+            dob,
+            gender,
+            banom,
+            role,
+            rantingId,
+            phone,
+            joinYear,
+            unsur,
+            address: alamat,
+            angkatan
+          };
+
+          importedKaders.push(newKader);
+          successCount++;
+        }
+
+        if (importedKaders.length === 0) {
+          setCsvKaderError("Tidak ada data kader valid yang ditemukan di file CSV.");
+          return;
+        }
+
+        if (setKaderList) {
+          setKaderList(prev => [...importedKaders, ...prev]);
+          setCsvKaderMessage(`Berhasil mengimpor ${successCount} data kader baru! ${failCount > 0 ? `(${failCount} baris gagal)` : ''}`);
+          setCsvKaderError(null);
+          setTimeout(() => setCsvKaderMessage(null), 6000);
+        } else {
+          setCsvKaderError("Fungsi penyimpan data tidak tersedia.");
+        }
+      } catch (err: any) {
+        setCsvKaderError(`Gagal memproses file CSV: ${err.message}`);
+        setTimeout(() => setCsvKaderError(null), 6000);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleRantingCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) {
+        setCsvRantingError("Gagal membaca file CSV.");
+        return;
+      }
+
+      try {
+        const lines = text.split('\n');
+        const importedRantings: Ranting[] = [];
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          const row = parseCSVLine(line);
+          if (row.length < 3) {
+            failCount++;
+            continue;
+          }
+
+          const csvId = row[0] ? row[0].trim() : '';
+          const name = row[1] ? row[1].trim() : '';
+          const village = row[2] ? row[2].trim() : '';
+          if (!name || name === 'NAMA RANTING') continue;
+
+          const establishedRaw = row[3] || '';
+          let established = establishedRaw;
+          if (establishedRaw.includes('-')) {
+            const parts = establishedRaw.split('-');
+            if (parts.length === 3 && parts[2].length === 4) {
+              established = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+          }
+
+          const address = row[4] || '';
+          const phone = row[5] || '';
+          const email = row[6] || '';
+          
+          const activeBanomRaw = row[7] || '';
+          const activeBanom = activeBanomRaw ? activeBanomRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+          
+          const activeLembagaRaw = row[8] || '';
+          const activeLembaga = activeLembagaRaw ? activeLembagaRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+          const id = csvId || `r-${Date.now()}_${i}`;
+
+          const newRanting: Ranting = {
+            id,
+            name,
+            village,
+            established,
+            address,
+            phone,
+            email,
+            activeBanom,
+            activeLembaga,
+            skDocs: []
+          };
+
+          importedRantings.push(newRanting);
+          successCount++;
+        }
+
+        if (importedRantings.length === 0) {
+          setCsvRantingError("Tidak ada data ranting valid yang ditemukan di file CSV.");
+          return;
+        }
+
+        if (setRantings) {
+          setRantings(prev => {
+            const merged = [...prev];
+            importedRantings.forEach(imp => {
+              const existingIdx = merged.findIndex(r => r.id === imp.id || r.village.toLowerCase() === imp.village.toLowerCase());
+              if (existingIdx !== -1) {
+                merged[existingIdx] = {
+                  ...merged[existingIdx],
+                  ...imp,
+                  imageUrl: merged[existingIdx].imageUrl || imp.imageUrl,
+                  skDocs: merged[existingIdx].skDocs && merged[existingIdx].skDocs.length > 0 ? merged[existingIdx].skDocs : imp.skDocs
+                };
+              } else {
+                merged.push(imp);
+              }
+            });
+            return merged;
+          });
+
+          setCsvRantingMessage(`Berhasil mengimpor/memperbarui ${successCount} data profil ranting! ${failCount > 0 ? `(${failCount} baris gagal)` : ''}`);
+          setCsvRantingError(null);
+          setTimeout(() => setCsvRantingMessage(null), 6000);
+        } else {
+          setCsvRantingError("Fungsi penyimpan data tidak tersedia.");
+        }
+      } catch (err: any) {
+        setCsvRantingError(`Gagal memproses file CSV: ${err.message}`);
+        setTimeout(() => setCsvRantingError(null), 6000);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // Lifted states to prevent Hook ordering bugs
-  const [profilFilterCategory, setProfilFilterCategory] = useState<'Semua' | 'MWC' | 'Ranting'>('Semua');
+  const [profilSelectedRanting, setProfilSelectedRanting] = useState<string>('Semua');
+  const [profilSelectedBanom, setProfilSelectedBanom] = useState<string>('Semua');
   const [profilSearchQuery, setProfilSearchQuery] = useState('');
+  const [selectedRantingProfileId, setSelectedRantingProfileId] = useState<string | null>(null);
 
   const [kaderSelectedBanom, setKaderSelectedBanom] = useState<string>('Semua');
   const [kaderSelectedRanting, setKaderSelectedRanting] = useState<string>('Semua');
@@ -483,90 +876,1119 @@ export default function PortalPages({
   // PAGE 1: PROFIL JAMIYAH
   // ==========================================
   const renderProfil = () => {
-    const filterCategory = profilFilterCategory;
-    const setFilterCategory = setProfilFilterCategory;
-    const searchQuery = profilSearchQuery;
-    const setSearchQuery = setProfilSearchQuery;
+    // If a specific Ranting is selected, render the detailed Ranting profile
+    if (selectedRantingProfileId) {
+      const ranting = rantings.find(r => r.id === selectedRantingProfileId);
+      if (!ranting) {
+        return (
+          <div className="p-6 text-center bg-white rounded-2xl border border-gray-200">
+            <p className="text-sm font-bold text-red-500">Profil Ranting tidak ditemukan.</p>
+            <button 
+              onClick={() => setSelectedRantingProfileId(null)}
+              className="mt-4 px-4 py-2 bg-tosca-600 text-white text-xs font-bold rounded-xl"
+            >
+              Kembali ke Daftar
+            </button>
+          </div>
+        );
+      }
 
-    const filteredPengurus = pengurusList.filter(p => {
-      const matchesCategory = filterCategory === 'Semua' || p.category === filterCategory;
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            p.role.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            p.education.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
+      // Filter pengurus for this specific Ranting
+      const rPengurus = pengurusList.filter(p => {
+        if (ranting.id === 'mwc') {
+          return p.category === 'MWC';
+        }
+        return p.category === 'Ranting' && p.rantingId === ranting.id;
+      });
 
-    return (
-      <div className="space-y-6 animate-fadeIn">
-        <div className="bg-white p-4.5 rounded-2xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-wrap gap-2">
-            {(['Semua', 'MWC', 'Ranting'] as const).map(cat => (
-              <button
-                key={cat}
-                onClick={() => setFilterCategory(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all
-                  ${filterCategory === cat 
-                    ? 'bg-tosca-600 text-white shadow-sm' 
-                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
-              >
-                {cat === 'Semua' ? 'Semua Jajaran' : cat === 'MWC' ? 'Pengurus MWC NU' : 'Pengurus Ranting (PRNU)'}
-              </button>
-            ))}
+      // Filter connected data
+      const rKader = kaderList.filter(k => ranting.id === 'mwc' ? true : k.rantingId === ranting.id);
+      
+      const rKegiatan = kegiatanList.filter(k => {
+        if (ranting.id === 'mwc') {
+          return k.organizer === 'MWC NU' || k.organizer.toLowerCase().includes('mwc');
+        }
+        return k.organizer.toLowerCase().includes(ranting.village.toLowerCase()) || 
+               k.organizer.toLowerCase().includes(ranting.name.toLowerCase());
+      });
+
+      const rUsaha = usahaList.filter(u => {
+        if (ranting.id === 'mwc') return true; // All MWC businesses
+        return u.location.toLowerCase().includes(ranting.village.toLowerCase()) ||
+               u.manager.toLowerCase().includes(ranting.village.toLowerCase());
+      });
+
+      const rIbadah = saranaIbadahList.filter(s => ranting.id === 'mwc' ? true : s.rantingId === ranting.id);
+      const rPendidikan = saranaPendidikanList.filter(s => ranting.id === 'mwc' ? true : s.rantingId === ranting.id);
+      const rKoin = koinList.filter(k => ranting.id === 'mwc' ? true : k.rantingId === ranting.id);
+      const banomDefinitions = [
+        { id: 'Muslimat NU', name: 'Muslimat Nahdlatul Ulama', desc: 'Wadah perjuangan wanita Islam NU (ibu-ibu/dewasa).' },
+        { id: 'GP Ansor', name: 'Gerakan Pemuda Ansor (GP Ansor)', desc: 'Wadah perjuangan pemuda NU.' },
+        { id: 'Fatayat NU', name: 'Fatayat Nahdlatul Ulama', desc: 'Wadah perjuangan pemuda wanita/perempuan muda NU.' },
+        { id: 'IPNU', name: 'Ikatan Pelajar Nahdlatul Ulama (IPNU)', desc: 'Wadah perjuangan pelajar dan santri laki-laki NU.' },
+        { id: 'IPPNU', name: 'Ikatan Pelajar Putri Nahdlatul Ulama (IPPNU)', desc: 'Wadah perjuangan pelajar dan santri perempuan NU.' },
+        { id: 'PMII', name: 'Pergerakan Mahasiswa Islam Indonesia (PMII)', desc: 'Wadah perjuangan mahasiswa NU (telah kembali menjadi Banom NU).' },
+        { id: 'ISNU', name: 'Ikatan Sarjana Nahdlatul Ulama (ISNU)', desc: 'Wadah para sarjana, intelektual, dan akademisi NU.' },
+        { id: 'JARTMAN', name: 'Jam\'iyyah Ahli Thariqah al-Mu\'tabarah an-Nahdliyyah (JARTMAN)', desc: 'Wadah pengamal ajaran thariqah yang mu\'tabar (sah/tersambung ke Rasulullah).' },
+        { id: 'JQH', name: 'Jam\'iyyatul Qurra wal Huffazh (JQH)', desc: 'Wadah para qari/qariah dan hafizh/hafizhah (penghafal Al-Qur\'an).' },
+        { id: 'Pergunu', name: 'Persatuan Guru Nahdlatul Ulama (Pergunu)', desc: 'Wadah perjuangan para guru dan pendidik NU.' },
+        { id: 'Sarbumusi', name: 'Serikat Buruh Muslimin Indonesia (Sarbumusi)', desc: 'Wadah perjuangan para buruh dan pekerja NU.' },
+        { id: 'Pagar Nusa', name: 'Ikatan Pencak Silat Pagar Nusa (IPS Pagar Nusa)', desc: 'Wadah yang menaungi seni bela diri pencak silat di lingkungan NU.' },
+        { id: 'Lesbumi', name: 'Lembaga Seniman Budayawan Muslimin Indonesia (Lesbumi - Basis Kultural)', desc: 'Wadah perjuangan di bidang seni dan kebudayaan (secara historis bergerak pada basis kultural).' }
+      ];
+
+      const lembagaDefinitions = [
+        { id: 'LDNU', name: 'Lembaga Dakwah Nahdlatul Ulama (LDNU)', desc: 'Melaksanakan kebijakan NU di bidang dakwah Islamiyah.' },
+        { id: 'LPMNU', name: 'Lembaga Pendidikan Ma\'arif NU (LPMNU)', desc: 'Menyelenggarakan dan mengelola pendidikan formal dari dasar hingga menengah.' },
+        { id: 'RMI-NU', name: 'Rabithah Ma\'ahid al-Islamiyah (RMI-NU)', desc: 'Asosiasi pondok pesantren NU, bertugas mengoordinasikan dan mengembangkan pesantren.' },
+        { id: 'LKKNU', name: 'Lembaga Kemaslahatan Keluarga Nahdlatul Ulama (LKKNU)', desc: 'Bergerak di bidang kesejahteraan keluarga, kependudukan, dan kesehatan reproduksi.' },
+        { id: 'LTMNU', name: 'Lembaga Takmir Masjid Nahdlatul Ulama (LTMNU)', desc: 'Mengurus pengelolaan, pemakmuran, dan pemberdayaan masjid-masjid NU.' },
+        { id: 'LAZISNU', name: 'Lembaga Amil Zakat, Infak, dan Sedekah NU (LAZISNU)', desc: 'Menghimpun, mengelola, dan mendistribusikan zakat, infak, sedekah, dan wakaf (ZISWAF).' },
+        { id: 'LKNU', name: 'Lembaga Kesehatan Nahdlatul Ulama (LKNU)', desc: 'Melaksanakan kebijakan NU di bidang pelayanan kesehatan dan pembangunan masyarakat sehat.' },
+        { id: 'LAKPESDAM', name: 'Lembaga Kajian dan Pengembangan Sumber Daya Manusia (LAKPESDAM)', desc: 'Fokus pada kajian strategis, isu-isu kebijakan, dan pengembangan kapasitas SDM.' },
+        { id: 'LPBHNU', name: 'Lembaga Penyuluhan dan Bantuan Hukum NU (LPBHNU)', desc: 'Memberikan advokasi, penyuluhan, dan bantuan hukum kepada warga NU dan masyarakat umum.' },
+        { id: 'LPNU', name: 'Lembaga Perekonomian Nahdlatul Ulama (LPNU)', desc: 'Mengembangkan ekonomi warga, kewirausahaan, dan koperasi di lingkungan NU.' },
+        { id: 'LP2NU', name: 'Lembaga Pengembangan Pertanian Nahdlatul Ulama (LP2NU)', desc: 'Mengembangkan bidang pertanian, perkebunan, peternakan, dan ketahanan pangan.' },
+        { id: 'LBMNU', name: 'Lembaga Bahtsul Masail Nahdlatul Ulama (LBMNU)', desc: 'Menghimpun, membahas, dan memecahkan masalah-masalah keagamaan (fiqih/kontemporer) yang membutuhkan kepastian hukum.' },
+        { id: 'LESBUMI', name: 'Lembaga Seniman Budayawan Muslimin Indonesia (LESBUMI)', desc: 'Melaksanakan kebijakan NU di bidang kebudayaan and seni (struktur kelembagaan terbaru).' },
+        { id: 'LTNNU', name: 'Lembaga Ta\'lif wan Nasyr NU (LTNNU)', desc: 'Lembaga infokom, penerbitan, media, dan dokumentasi karya pemikiran NU.' },
+        { id: 'LPBI-NU', name: 'Lembaga Penanggulangan Bencana & Perubahan Iklim (LPBI-NU)', desc: 'Bergerak dalam mitigasi bencana, tanggap darurat, penanggulangan bencana, dan isu lingkungan hidup.' },
+        { id: 'LF-NU', name: 'Lembaga Falakiyah NU (LF-NU)', desc: 'Mengelola urusan hisab dan rukyat serta pengembangan ilmu falak (astronomi Islam).' },
+        { id: 'LWPNU', name: 'Lembaga Wakaf dan Pertanahan NU (LWPNU)', desc: 'Mengurus sertifikasi, inventarisasi, pengelolaan, dan hukum aset-aset tanah dan bangunan milik NU.' }
+      ];
+
+      // Computations for Harian, Banoms, and Lembagas
+      const rPengurusHarian = rPengurus.filter(p => p.groupType === 'Harian' || !p.groupType);
+
+      // Find all active/populated Banom with their members
+      const banomPengurus = rPengurus.filter(p => p.groupType === 'Banom' && p.groupName);
+      const banomGrouped: { [key: string]: Pengurus[] } = {};
+      banomPengurus.forEach(p => {
+        const gName = p.groupName || 'Lainnya';
+        if (!banomGrouped[gName]) {
+          banomGrouped[gName] = [];
+        }
+        banomGrouped[gName].push(p);
+      });
+
+      const activeBanomsWithMembers = Object.keys(banomGrouped).map(groupName => {
+        const def = banomDefinitions.find(d => d.id === groupName);
+        return {
+          id: groupName,
+          name: def ? def.name : groupName,
+          desc: def ? def.desc : 'Badan Otonom NU tingkat Ranting.',
+          members: banomGrouped[groupName]
+        };
+      });
+
+      // Find all active/populated Lembaga with their members
+      const lembagaPengurus = rPengurus.filter(p => p.groupType === 'Lembaga' && p.groupName);
+      const lembagaGrouped: { [key: string]: Pengurus[] } = {};
+      lembagaPengurus.forEach(p => {
+        const gName = p.groupName || 'Lainnya';
+        if (!lembagaGrouped[gName]) {
+          lembagaGrouped[gName] = [];
+        }
+        lembagaGrouped[gName].push(p);
+      });
+
+      const activeLembagasWithMembers = Object.keys(lembagaGrouped).map(groupName => {
+        const def = lembagaDefinitions.find(d => d.id === groupName);
+        return {
+          id: groupName,
+          name: def ? def.name : groupName,
+          desc: def ? def.desc : 'Lembaga Nahdlatul Ulama tingkat Ranting.',
+          members: lembagaGrouped[groupName]
+        };
+      });
+
+      return (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Back button and title */}
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setSelectedRantingProfileId(null)}
+              className="p-2 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-tosca-600 hover:border-tosca-100 transition-all shadow-xs"
+            >
+              ← Kembali ke Daftar Ranting
+            </button>
+            <div>
+              <span className="text-[10px] font-bold text-tosca-700 uppercase tracking-wider block">Profil Detil Jamiyah</span>
+              <h2 className="text-lg md:text-xl font-display font-extrabold text-gray-900">{ranting.name}</h2>
+            </div>
           </div>
 
-          <div className="relative max-w-xs w-full">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cari nama, jabatan, pendidikan..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-4 py-2 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 focus:bg-white text-gray-800"
-            />
-          </div>
-        </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column: Office info & Connected Data links */}
+            <div className="space-y-6">
+              {/* Office/Building Card */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+                <div className="relative aspect-video w-full bg-slate-100 overflow-hidden">
+                  <img
+                    src={ranting.imageUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'}
+                    alt={ranting.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-end p-4">
+                    {userRole !== 'guest' && (userRole === 'super_admin' || (userRole === 'admin_ranting' && ranting.id === 'r1')) && (
+                      <button
+                        onClick={() => {
+                          setTempPhotoUrl(ranting.imageUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png');
+                          setUploadPhotoError(null);
+                          setShowRantingPhotoModal(true);
+                        }}
+                        className="bg-white/95 hover:bg-white text-slate-800 text-[10px] font-bold px-2 py-1 rounded-md shadow-xs transition-all flex items-center space-x-1"
+                      >
+                        <Upload className="w-3 h-3 text-tosca-600" />
+                        <span>Ubah Foto</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-        {/* Executives Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPengurus.map((p) => (
-            <div key={p.id} className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col justify-between">
-              <div className="p-5 flex items-start space-x-4">
-                <img 
-                  src={p.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
-                  alt={p.name} 
-                  referrerPolicy="no-referrer"
-                  className="w-16 h-16 rounded-xl object-contain border border-slate-200 bg-slate-50 shrink-0 shadow-xs" 
-                />
-                <div className="space-y-1">
-                  <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider
-                    ${p.category === 'MWC' ? 'bg-tosca-100 text-tosca-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                    {p.category === 'MWC' ? 'Pengurus MWC' : getRantingName(p.rantingId)}
-                  </span>
-                  <h4 className="text-xs md:text-sm font-bold text-gray-900 leading-tight">{p.name}</h4>
-                  <p className="text-[11px] text-tosca-600 font-bold">{p.role}</p>
+                <div className="p-5 space-y-4">
+                  <h3 className="font-bold text-gray-900 text-sm">Informasi Kantor & Kontak</h3>
+                  
+                  <div className="space-y-3.5 text-xs text-slate-650">
+                    <div className="flex items-start space-x-3">
+                      <MapPin className="w-4 h-4 text-tosca-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Alamat Kantor</span>
+                        <span className="font-semibold text-slate-800 leading-normal">{ranting.address || `Desa ${ranting.village}, Kec. Bungah, Gresik`}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-3">
+                      <Phone className="w-4 h-4 text-tosca-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Kontak WA / Telepon</span>
+                        <span className="font-mono font-semibold text-slate-800">{ranting.phone || '08123456789'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-3">
+                      <Mail className="w-4 h-4 text-tosca-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Email Resmi</span>
+                        <span className="font-semibold text-slate-800">{ranting.email || `${ranting.village.toLowerCase().replace(/\s+/g, '')}@mwcnubungah.or.id`}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sejarah Singkat */}
+                  <div className="pt-4 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Sejarah Singkat</span>
+                      {userRole !== 'guest' && (
+                        <button
+                          onClick={() => {
+                            const newHistory = window.prompt("Ubah Sejarah Singkat:", ranting.history || "");
+                            if (newHistory !== null && setRantings) {
+                              setRantings(prev => prev.map(r => r.id === ranting.id ? { ...r, history: newHistory } : r));
+                            }
+                          }}
+                          className="text-[10px] font-bold text-tosca-600 hover:text-tosca-700 bg-tosca-50 px-2 py-0.5 rounded border border-tosca-100 transition-all"
+                        >
+                          Ubah Sejarah
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed italic font-medium whitespace-pre-wrap">
+                      {ranting.history || "Sejarah singkat kepengurusan jamiyah ranting belum diisi. Hubungi pengurus untuk memperbarui halaman ini."}
+                    </p>
+                  </div>
                 </div>
               </div>
-              
-              <div className="bg-gray-50/80 px-5 py-3 border-t border-gray-100 text-[10.5px] grid grid-cols-2 gap-y-2 gap-x-4">
-                <div>
-                  <span className="text-gray-400 block uppercase tracking-wider text-[8px] font-bold">Pendidikan</span>
-                  <span className="text-gray-700 font-semibold truncate block">{p.education}</span>
+
+              {/* Sinergi Portal - Terkoneksi Data */}
+              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-2">
+                  <h3 className="font-bold text-gray-900 text-sm">Sinergi Data Terkoneksi</h3>
+                  <p className="text-[10px] text-slate-400">Data kader, aset, dan kegiatan terintegrasi</p>
                 </div>
-                <div>
-                  <span className="text-gray-400 block uppercase tracking-wider text-[8px] font-bold">Kaderisasi NU</span>
-                  <span className="text-gray-700 font-semibold truncate block">{p.kaderisasiStatus}</span>
-                </div>
-                <div className="col-span-2 pt-1 flex items-center space-x-1.5 text-gray-500">
-                  <Phone className="w-3.5 h-3.5 text-tosca-600" />
-                  <span className="font-mono">{p.phone}</span>
+
+                <div className="space-y-3">
+                  {/* Kader Connection */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 hover:bg-tosca-50/40 rounded-xl border border-slate-100 hover:border-tosca-100 transition-all cursor-pointer"
+                    onClick={() => {
+                      setKaderSelectedRanting(ranting.id === 'mwc' ? 'Semua' : ranting.id);
+                      setActiveTab('kader');
+                    }}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-tosca-50 text-tosca-700 rounded-lg">
+                        <Users2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-gray-800 block">Data Kader Terdaftar</span>
+                        <span className="text-[10px] text-slate-400 font-medium">Klik untuk lihat list lengkap</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-tosca-700 font-mono block">{rKader.length}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">KADER</span>
+                    </div>
+                  </div>
+
+                  {/* Koin S3 Connection */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 hover:bg-amber-50/40 rounded-xl border border-slate-100 hover:border-amber-100 transition-all cursor-pointer"
+                    onClick={() => {
+                      setKoinSelectedRanting(ranting.id === 'mwc' ? 'Semua' : ranting.id);
+                      setActiveTab('koin_s3');
+                    }}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-amber-50 text-amber-700 rounded-lg">
+                        <Coins className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-gray-800 block">Koin S3 LAZISNU</span>
+                        <span className="text-[10px] text-slate-400 font-medium">Penyaluran & Perolehan</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[11px] font-bold text-amber-600 block">
+                        {rKoin.length > 0 ? formatRupiah(rKoin.reduce((sum, k) => sum + k.amount, 0)) : 'Rp 0'}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">TOTAL</span>
+                    </div>
+                  </div>
+
+                  {/* Kegiatan Connection */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 hover:bg-emerald-50/40 rounded-xl border border-slate-100 hover:border-emerald-100 transition-all cursor-pointer"
+                    onClick={() => setActiveTab('kegiatan')}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg">
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-gray-800 block">Kegiatan Jamiyah</span>
+                        <span className="text-[10px] text-slate-400 font-medium">Rencana & riwayat kegiatan</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-emerald-700 font-mono block">{rKegiatan.length}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">AGENDA</span>
+                    </div>
+                  </div>
+
+                  {/* Usaha Connection */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 hover:bg-blue-50/40 rounded-xl border border-slate-100 hover:border-blue-100 transition-all cursor-pointer"
+                    onClick={() => setActiveTab('usaha')}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-blue-50 text-blue-700 rounded-lg">
+                        <Briefcase className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-gray-800 block">Badan Usaha Jamiyah</span>
+                        <span className="text-[10px] text-slate-400 font-medium">Ekonomi Syariah & koperasi</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-blue-700 font-mono block">{rUsaha.length}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">USAHA</span>
+                    </div>
+                  </div>
+
+                  {/* Sarana Pendidikan & Ibadah Connection */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2.5 bg-slate-50 hover:bg-purple-50/40 rounded-xl border border-slate-100 hover:border-purple-100 transition-all cursor-pointer text-center"
+                      onClick={() => setActiveTab('sarana_pendidikan')}
+                    >
+                      <span className="text-[10px] text-slate-400 font-bold block uppercase">PENDIDIKAN</span>
+                      <span className="text-sm font-bold text-purple-700 font-mono">{rPendidikan.length} unit</span>
+                    </div>
+                    <div className="p-2.5 bg-slate-50 hover:bg-teal-50/40 rounded-xl border border-slate-100 hover:border-teal-100 transition-all cursor-pointer text-center"
+                      onClick={() => setActiveTab('sarana_ibadah')}
+                    >
+                      <span className="text-[10px] text-slate-400 font-bold block uppercase">IBADAH</span>
+                      <span className="text-sm font-bold text-teal-700 font-mono">{rIbadah.length} unit</span>
+                    </div>
+                  </div>
+
+                  {/* Kumpulan Surat Keputusan (SK) */}
+                  <div className="pt-4 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-800">Kumpulan SK Pengurus</h4>
+                        <p className="text-[9px] text-slate-400">Arsip Surat Keputusan (SK) resmi kepengurusan</p>
+                      </div>
+                      {userRole !== 'guest' && (
+                        <button
+                          onClick={() => {
+                            setUploadSKError(null);
+                            setShowSKUploadModal(true);
+                          }}
+                          className="text-[10px] font-bold text-tosca-600 hover:text-tosca-700 bg-tosca-50 hover:bg-tosca-100 px-2 py-1 rounded border border-tosca-200 transition-all flex items-center space-x-1"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Unggah SK</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                      {(!ranting.skDocs || ranting.skDocs.length === 0) ? (
+                        <p className="text-[10px] text-slate-400 italic text-center py-3 bg-slate-50/50 rounded-lg">Belum ada dokumen SK yang diunggah.</p>
+                      ) : (
+                        ranting.skDocs.map((sk) => (
+                          <div key={sk.id} className="p-2 bg-slate-50 rounded-lg border border-slate-100 hover:border-slate-200 transition-all flex items-center justify-between">
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="flex items-center space-x-1.5 flex-wrap">
+                                <span className="text-[10px] font-bold text-slate-800 truncate">No: {sk.number}</span>
+                                {sk.isLatest && (
+                                  <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 px-1 py-0.2 rounded border border-emerald-100">Aktif</span>
+                                )}
+                              </div>
+                              <p className="text-[9px] text-slate-500 font-semibold">Masa Bakti: <span className="text-slate-700">{sk.period}</span></p>
+                              <p className="text-[8px] text-slate-400 font-medium">Diunggah: {sk.uploadDate}</p>
+                            </div>
+                            <div className="flex items-center space-x-1 shrink-0">
+                              <a 
+                                href={sk.fileUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="p-1 bg-white hover:bg-tosca-50 text-tosca-600 rounded border border-slate-200 hover:border-tosca-300 transition-all shadow-2xs"
+                                title="Unduh / Lihat File"
+                              >
+                                <Download className="w-3 h-3" />
+                              </a>
+                              {userRole !== 'guest' && (
+                                <button
+                                  onClick={() => handleDeleteSK(sk.id)}
+                                  className="p-1 bg-white hover:bg-red-50 text-red-600 rounded border border-slate-200 hover:border-red-300 transition-all shadow-2xs"
+                                  title="Hapus SK"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          ))}
 
-          {filteredPengurus.length === 0 && (
+            {/* Right Column (Tabs: Jajaran Pengurus, Banom, Lembaga) */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Profile Main Content Sections */}
+              
+              {/* 1. Jajaran Pengurus */}
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-sm">Jajaran Pengurus Harian</h3>
+                    <p className="text-[10px] text-slate-400">Jajaran Syuriah (Rais) & Tanfidziyah (Ketua) resmi</p>
+                  </div>
+                  <span className="text-[10px] font-bold bg-tosca-50 text-tosca-700 px-2 py-0.5 rounded border border-tosca-100">
+                    {rPengurusHarian.length} Jajaran
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {rPengurusHarian.map((p) => (
+                    <div key={p.id} className="bg-slate-50/70 p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all">
+                      <img 
+                        src={p.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
+                        alt={p.name} 
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-xl object-contain border border-slate-200 bg-white shrink-0 shadow-xs" 
+                      />
+                      <div className="space-y-1 overflow-hidden">
+                        <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-tosca-100 text-tosca-800">
+                          {p.role}
+                        </span>
+                        <h4 className="text-xs font-bold text-gray-900 truncate leading-tight">{p.name}</h4>
+                        
+                        <div className="grid grid-cols-2 gap-x-2 pt-1.5 text-[9px] text-slate-500">
+                          <div>
+                            <span className="block text-slate-400 font-bold uppercase text-[7px]">Pendidikan</span>
+                            <span className="font-semibold text-slate-700 truncate block">{p.education}</span>
+                          </div>
+                          <div>
+                            <span className="block text-slate-400 font-bold uppercase text-[7px]">Kaderisasi</span>
+                            <span className="font-semibold text-slate-700 truncate block">{p.kaderisasiStatus}</span>
+                          </div>
+                        </div>
+                        {p.phone && (
+                          <div className="flex items-center space-x-1 text-slate-500 pt-1 text-[9px] font-mono">
+                            <Phone className="w-3 h-3 text-tosca-600" />
+                            <span>{p.phone}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {rPengurusHarian.length === 0 && (
+                    <div className="col-span-full py-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                      <p className="text-xs text-slate-500 font-bold">Data Pengurus Harian belum dimasukkan secara lengkap di sistem.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. Badan Otonom (Banom) NU */}
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-2.5">
+                  <h3 className="font-bold text-gray-900 text-sm">Badan Otonom (Banom) NU</h3>
+                  <p className="text-[10px] text-slate-400">Pilar perangkat organisasi berbasis usia, profesi, & kaderisasi internal</p>
+                </div>
+
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 no-scrollbar">
+                  {activeBanomsWithMembers.map((banom) => (
+                    <div key={banom.id} className="bg-slate-50/70 p-4 rounded-xl border border-slate-150 hover:border-emerald-200 transition-all flex flex-col space-y-3">
+                      <div className="flex items-start justify-between border-b border-slate-150 pb-2">
+                        <div className="flex items-center space-x-2.5">
+                          <span className="w-8 h-8 rounded-lg flex items-center justify-center font-display text-[10.5px] font-extrabold bg-emerald-100 text-emerald-800 shrink-0">
+                            {banom.id.split(' ').map(w => w[0]).join('')}
+                          </span>
+                          <div>
+                            <h4 className="text-xs font-bold text-gray-900 leading-tight">{banom.id}</h4>
+                            <span className="text-[8px] text-slate-400 block font-semibold truncate max-w-[180px]">{banom.name}</span>
+                          </div>
+                        </div>
+
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase shrink-0 bg-emerald-100 text-emerald-800">
+                          {banom.members.length} Pengurus
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed font-light">{banom.desc}</p>
+                      
+                      <div className="space-y-1.5 pt-1">
+                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Pengurus Aktif:</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {banom.members.map((m) => (
+                            <div key={m.id} className="bg-white p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all shadow-xs">
+                              <img 
+                                src={m.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
+                                alt={m.name} 
+                                referrerPolicy="no-referrer"
+                                className="w-12 h-12 rounded-xl object-contain border border-slate-200 bg-slate-50 shrink-0 shadow-xs" 
+                              />
+                              <div className="space-y-1 overflow-hidden min-w-0 w-full">
+                                <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-100">
+                                  {m.role || 'Pengurus'}
+                                </span>
+                                <h4 className="text-xs font-bold text-gray-900 truncate leading-tight">{m.name}</h4>
+                                
+                                <div className="grid grid-cols-2 gap-x-2 pt-1.5 text-[9px] text-slate-500">
+                                  <div>
+                                    <span className="block text-slate-400 font-bold uppercase text-[7px]">Pendidikan</span>
+                                    <span className="font-semibold text-slate-700 truncate block">{m.education || '-'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="block text-slate-400 font-bold uppercase text-[7px]">Kaderisasi</span>
+                                    <span className="font-semibold text-slate-700 truncate block">{m.kaderisasiStatus || '-'}</span>
+                                  </div>
+                                </div>
+                                {m.phone && (
+                                  <div className="flex items-center space-x-1 text-slate-500 pt-1 text-[9px] font-mono">
+                                    <Phone className="w-3 h-3 text-tosca-600" />
+                                    <span>{m.phone}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {activeBanomsWithMembers.length === 0 && (
+                    <div className="py-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                      <p className="text-xs text-slate-500 font-bold">Belum ada Badan Otonom (Banom) yang memiliki data pengurus aktif terdaftar.</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Gunakan dashboard Admin CMS untuk menambahkan pengurus Banom.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Lembaga NU */}
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-2.5">
+                  <h3 className="font-bold text-gray-900 text-sm">Lembaga-Lembaga NU</h3>
+                  <p className="text-[10px] text-slate-400">Perangkat departementalisasi pelaksana program bidang keahlian khusus</p>
+                </div>
+
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 no-scrollbar">
+                  {activeLembagasWithMembers.map((lem) => (
+                    <div key={lem.id} className="bg-slate-50/70 p-4 rounded-xl border border-slate-150 hover:border-blue-200 transition-all flex flex-col space-y-3">
+                      <div className="flex items-start justify-between border-b border-slate-150 pb-2">
+                        <div className="flex items-center space-x-2.5">
+                          <span className="w-8 h-8 rounded-lg flex items-center justify-center font-display text-[10.5px] font-extrabold bg-blue-100 text-blue-800 shrink-0">
+                            {lem.id.split('-')[0]}
+                          </span>
+                          <div>
+                            <h4 className="text-xs font-bold text-gray-900 leading-tight">{lem.id}</h4>
+                            <span className="text-[8px] text-slate-400 block font-semibold truncate max-w-[180px]">{lem.name}</span>
+                          </div>
+                        </div>
+
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase shrink-0 bg-blue-100 text-blue-800">
+                          {lem.members.length} Pengurus
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-550 leading-relaxed font-light">{lem.desc}</p>
+
+                      <div className="space-y-1.5 pt-1">
+                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Pengurus Aktif:</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {lem.members.map((m) => (
+                            <div key={m.id} className="bg-white p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all shadow-xs">
+                              <img 
+                                src={m.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
+                                alt={m.name} 
+                                referrerPolicy="no-referrer"
+                                className="w-12 h-12 rounded-xl object-contain border border-slate-200 bg-slate-50 shrink-0 shadow-xs" 
+                              />
+                              <div className="space-y-1 overflow-hidden min-w-0 w-full">
+                                <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-100">
+                                  {m.role || 'Pengurus'}
+                                </span>
+                                <h4 className="text-xs font-bold text-gray-900 truncate leading-tight">{m.name}</h4>
+                                
+                                <div className="grid grid-cols-2 gap-x-2 pt-1.5 text-[9px] text-slate-500">
+                                  <div>
+                                    <span className="block text-slate-400 font-bold uppercase text-[7px]">Pendidikan</span>
+                                    <span className="font-semibold text-slate-700 truncate block">{m.education || '-'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="block text-slate-400 font-bold uppercase text-[7px]">Kaderisasi</span>
+                                    <span className="font-semibold text-slate-700 truncate block">{m.kaderisasiStatus || '-'}</span>
+                                  </div>
+                                </div>
+                                {m.phone && (
+                                  <div className="flex items-center space-x-1 text-slate-500 pt-1 text-[9px] font-mono">
+                                    <Phone className="w-3 h-3 text-tosca-600" />
+                                    <span>{m.phone}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {activeLembagasWithMembers.length === 0 && (
+                    <div className="py-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                      <p className="text-xs text-slate-500 font-bold">Belum ada Lembaga-Lembaga NU yang memiliki data pengurus aktif terdaftar.</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Gunakan dashboard Admin CMS untuk menambahkan pengurus Lembaga.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal: Ubah Foto Profil Ranting */}
+          {showRantingPhotoModal && (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl max-w-md w-full border border-gray-200 shadow-xl overflow-hidden animate-scaleIn">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-sm">Ubah Foto Profil Ranting</h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">Unggah foto kantor, aktivitas, atau setel ke logo NU default</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowRantingPhotoModal(false)}
+                    className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {/* Preview Current */}
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Pratinjau Foto</span>
+                    <div className="w-full aspect-video bg-slate-50 border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center">
+                      <img 
+                        src={tempPhotoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
+                        alt="Pratinjau" 
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Drag and Drop Area */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">Unggah Berkas Baru</label>
+                    <div 
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                      onClick={() => document.getElementById('ranting-photo-input')?.click()}
+                      className="border-2 border-dashed border-slate-200 hover:border-tosca-400 hover:bg-tosca-50/20 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-1"
+                    >
+                      <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                      <span className="text-xs text-slate-700 font-semibold">Tarik & lepas file atau <span className="text-tosca-600 underline">klik untuk telusuri</span></span>
+                      <span className="text-[9px] text-slate-400">PNG, JPG, JPEG sampai dengan 5MB</span>
+                      <input 
+                        type="file" 
+                        id="ranting-photo-input"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleFileUpload(e.target.files[0]);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* URL Input */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">Atau Masukkan Tautan/URL Gambar</label>
+                    <input 
+                      type="text"
+                      value={tempPhotoUrl}
+                      onChange={(e) => setTempPhotoUrl(e.target.value)}
+                      placeholder="https://tautan-gambar-anda.com/foto.jpg"
+                      className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 text-gray-800 font-medium"
+                    />
+                  </div>
+
+                  {/* Set default trigger */}
+                  <div className="flex justify-start">
+                    <button
+                      type="button"
+                      onClick={() => setTempPhotoUrl('https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png')}
+                      className="text-xs text-tosca-600 hover:text-tosca-700 font-semibold underline flex items-center space-x-1"
+                    >
+                      Setel ke Logo NU Default (Bungah)
+                    </button>
+                  </div>
+
+                  {uploadingPhoto && (
+                    <div className="text-center text-xs text-tosca-600 font-semibold animate-pulse">
+                      Mengunggah ke Cloudinary...
+                    </div>
+                  )}
+
+                  {uploadPhotoError && (
+                    <div className="text-center text-xs text-red-600 font-semibold">
+                      {uploadPhotoError}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end space-x-2">
+                  <button
+                    onClick={() => setShowRantingPhotoModal(false)}
+                    className="px-4 py-2 bg-white hover:bg-gray-100 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200 transition-all"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    disabled={uploadingPhoto}
+                    onClick={() => handleSaveRantingPhoto(tempPhotoUrl)}
+                    className="px-4 py-2 bg-tosca-600 hover:bg-tosca-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-all"
+                  >
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal: Unggah SK Baru */}
+          {showSKUploadModal && (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl max-w-md w-full border border-gray-200 shadow-xl overflow-hidden animate-scaleIn">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-sm">Unggah Dokumen SK Pengurus</h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">Arsipkan Surat Keputusan (SK) MWC / Ranting secara digital</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setShowSKUploadModal(false);
+                      setSkNumber('');
+                      setSkPeriod('');
+                      setSkFileUrl('');
+                      setSkIsLatest(true);
+                      setUploadSKError(null);
+                    }}
+                    className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {/* Nomor SK */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">Nomor SK Resmi</label>
+                    <input 
+                      type="text"
+                      value={skNumber}
+                      onChange={(e) => setSkNumber(e.target.value)}
+                      placeholder="Contoh: 124/A.II/04/2024"
+                      className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 text-gray-800 font-medium"
+                    />
+                  </div>
+
+                  {/* Masa Bakti */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">Masa Bakti Kepengurusan</label>
+                    <input 
+                      type="text"
+                      value={skPeriod}
+                      onChange={(e) => setSkPeriod(e.target.value)}
+                      placeholder="Contoh: 2024-2029"
+                      className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 text-gray-800 font-medium"
+                    />
+                  </div>
+
+                  {/* File Upload Area */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">Berkas File SK (PDF/Gambar)</label>
+                    <div 
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          handleSKFileUpload(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      onClick={() => document.getElementById('sk-file-input')?.click()}
+                      className="border-2 border-dashed border-slate-200 hover:border-tosca-400 hover:bg-tosca-50/20 rounded-xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-1"
+                    >
+                      <Upload className="w-5 h-5 text-slate-400 mb-0.5" />
+                      <span className="text-xs text-slate-700 font-semibold">Tarik & lepas file atau <span className="text-tosca-600 underline">klik untuk telusuri</span></span>
+                      <span className="text-[9px] text-slate-400">PDF, PNG, JPG, JPEG sampai dengan 5MB</span>
+                      <input 
+                        type="file" 
+                        id="sk-file-input"
+                        accept=".pdf,image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleSKFileUpload(e.target.files[0]);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Alternate URL */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">Atau Masukkan Tautan File SK</label>
+                    <input 
+                      type="text"
+                      value={skFileUrl}
+                      onChange={(e) => setSkFileUrl(e.target.value)}
+                      placeholder="https://tautan-berkas-sk.com/sk_resmi.pdf"
+                      className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 text-gray-800 font-medium"
+                    />
+                  </div>
+
+                  {/* Is Latest Checkbox */}
+                  <label className="flex items-center space-x-2.5 cursor-pointer pt-1">
+                    <input 
+                      type="checkbox"
+                      checked={skIsLatest}
+                      onChange={(e) => setSkIsLatest(e.target.checked)}
+                      className="rounded border-gray-300 text-tosca-600 focus:ring-tosca-500 h-4 w-4"
+                    />
+                    <div className="text-left">
+                      <span className="text-xs font-bold text-slate-700 block">Setel Sebagai SK Aktif Saat Ini</span>
+                      <span className="text-[9px] text-slate-400 block font-medium">SK ini akan menjadi referensi pengurus aktif utama</span>
+                    </div>
+                  </label>
+
+                  {uploadingSK && (
+                    <div className="text-center text-xs text-tosca-600 font-semibold animate-pulse">
+                      Mengunggah dokumen SK...
+                    </div>
+                  )}
+
+                  {uploadSKError && (
+                    <div className="text-center text-xs text-red-600 font-semibold">
+                      {uploadSKError}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end space-x-2">
+                  <button
+                    onClick={() => {
+                      setShowSKUploadModal(false);
+                      setSkNumber('');
+                      setSkPeriod('');
+                      setSkFileUrl('');
+                      setSkIsLatest(true);
+                      setUploadSKError(null);
+                    }}
+                    className="px-4 py-2 bg-white hover:bg-gray-100 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200 transition-all"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    disabled={uploadingSK}
+                    onClick={handleSaveSK}
+                    className="px-4 py-2 bg-tosca-600 hover:bg-tosca-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-all"
+                  >
+                    Simpan SK
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Default Directory View (showing all 30 rantings)
+    const selectedRanting = profilSelectedRanting;
+    const setSelectedRanting = setProfilSelectedRanting;
+    const selectedBanom = profilSelectedBanom;
+    const setSelectedBanom = setProfilSelectedBanom;
+    const searchQuery = profilSearchQuery;
+    const setSearchQuery = setProfilSearchQuery;
+
+    const filteredRantings = rantings.filter(r => {
+      // Filter by Wilayah
+      const matchesRanting = selectedRanting === 'Semua' || r.id === selectedRanting;
+
+      // Filter by Banom / Lembaga
+      let matchesBanom = true;
+      if (selectedBanom !== 'Semua') {
+        if (selectedBanom === 'Pengurus Harian') {
+          const hasHarian = pengurusList.some(p => 
+            (r.id === 'mwc' && p.category === 'MWC' && (!p.groupType || p.groupType === 'Harian')) ||
+            (r.id !== 'mwc' && p.category === 'Ranting' && p.rantingId === r.id && (!p.groupType || p.groupType === 'Harian'))
+          );
+          matchesBanom = hasHarian;
+        } else {
+          const activeBanoms = r.id === 'mwc' ? ['Muslimat NU', 'GP Ansor', 'Fatayat NU', 'IPNU', 'IPPNU', 'PMII', 'ISNU', 'JARTMAN', 'JQH', 'Pergunu', 'Sarbumusi', 'Pagar Nusa', 'Lesbumi'] : (r.activeBanom || []);
+          const activeLembagas = r.id === 'mwc' ? ['LDNU', 'LPMNU', 'RMI-NU', 'LKKNU', 'LTMNU', 'LAZISNU', 'LKNU', 'LAKPESDAM', 'LPBHNU', 'LPNU', 'LP2NU', 'LBMNU', 'LESBUMI', 'LTNNU', 'LPBI-NU', 'LF-NU', 'LWPNU'] : (r.activeLembaga || []);
+          
+          const matchesActiveB = activeBanoms.some(b => b.toLowerCase().includes(selectedBanom.toLowerCase()));
+          const matchesActiveL = activeLembagas.some(l => l.toLowerCase().includes(selectedBanom.toLowerCase()));
+          matchesBanom = matchesActiveB || matchesActiveL;
+        }
+      }
+
+      // Filter by search text
+      const matchesSearch = 
+        r.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        r.village.toLowerCase().includes(searchQuery.toLowerCase());
+
+      return matchesRanting && matchesBanom && matchesSearch;
+    });
+
+    // Helper to count cadres in a ranting
+    const getKaderCount = (id: string) => {
+      if (id === 'mwc') return kaderList.length;
+      return kaderList.filter(k => k.rantingId === id).length;
+    };
+
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        {/* Profile directory description & count banner */}
+        <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-xl font-display font-extrabold text-gray-900">Profil Jam&apos;iyah & Ranting NU se-Kecamatan Bungah</h2>
+            <p className="text-xs text-slate-500 leading-relaxed max-w-2xl">
+              Berikut daftar terpadu unit kepengurusan Jam&apos;iyah Nahdlatul Ulama di wilayah Kecamatan Bungah, Gresik. Terdiri dari **1 MWC NU Tingkat Kecamatan** dan **29 Pengurus Ranting Nahdlatul Ulama (PRNU)** tingkat Desa. Klik salah satu kepengurusan untuk melihat profil pengurus lengkap, status keaktifan Badan Otonom, dan rekapitulasi data kader secara online.
+            </p>
+          </div>
+          <div className="bg-tosca-50/80 px-4.5 py-3 rounded-xl border border-tosca-100 text-center shrink-0">
+            <span className="text-xl font-mono font-bold text-tosca-700 block">{filteredRantings.length}</span>
+            <span className="text-[9px] font-bold text-tosca-800 uppercase tracking-wider block">Kepengurusan Terfilter</span>
+          </div>
+        </section>
+
+        {/* Filter and Search controls */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Wilayah (MWCNU & Ranting)</label>
+              <select
+                value={selectedRanting}
+                onChange={(e) => setSelectedRanting(e.target.value)}
+                className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 focus:bg-white text-slate-700 font-semibold"
+              >
+                <option value="Semua">Semua Wilayah (30)</option>
+                <option value="mwc">MWC NU BUNGAH (Tingkat Kecamatan)</option>
+                {rantings.filter(r => r.id !== 'mwc').map(r => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Keaktifan Banom / Lembaga</label>
+              <select
+                value={selectedBanom}
+                onChange={(e) => setSelectedBanom(e.target.value)}
+                className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 focus:bg-white text-slate-700 font-semibold"
+              >
+                <option value="Semua">Semua Banom & Lembaga</option>
+                <optgroup label="Pengurus Inti">
+                  <option value="Pengurus Harian">Pengurus Harian (Syuriah/Tanfidziyah)</option>
+                </optgroup>
+                <optgroup label="Badan Otonom (Banom)">
+                  <option value="Muslimat NU">Muslimat NU</option>
+                  <option value="GP Ansor">GP Ansor</option>
+                  <option value="Fatayat NU">Fatayat NU</option>
+                  <option value="IPNU">IPNU</option>
+                  <option value="IPPNU">IPPNU</option>
+                  <option value="Pagar Nusa">Pagar Nusa</option>
+                  <option value="Banser">Banser</option>
+                </optgroup>
+                <optgroup label="Lembaga-Lembaga NU">
+                  <option value="LAZISNU">LAZISNU</option>
+                  <option value="LTMNU">LTMNU</option>
+                  <option value="LDNU">LDNU</option>
+                  <option value="RMI-NU">RMI-NU</option>
+                  <option value="LPMNU">LPMNU (Ma'arif)</option>
+                  <option value="LWPNU">LWPNU</option>
+                  <option value="LAKPESDAM">LAKPESDAM</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Pencarian Desa / Wilayah</label>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Ketik nama ranting atau desa..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 focus:bg-white text-gray-800"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Sinergi CSV Bulk Importer/Exporter for Rantings */}
+          <div className="border-t border-dashed border-gray-100 pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50 -mx-5 -mb-5 p-4 rounded-b-2xl">
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Integrasi Data Profil Ranting</span>
+              <p className="text-[11px] text-slate-500 font-semibold">Unduh template atau impor data profil ranting se-kecamatan secara massal via berkas CSV.</p>
+            </div>
+            <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+              <button
+                onClick={downloadRantingCSVTemplate}
+                className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 transition-colors flex items-center space-x-1.5"
+                title="Unduh Template CSV Profil Ranting"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <span>Unduh Template</span>
+              </button>
+              {userRole !== 'guest' ? (
+                <label className="cursor-pointer px-3 py-1.5 bg-tosca-600 hover:bg-tosca-700 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 transition-colors shadow-xs">
+                  <Upload className="w-3.5 h-3.5 text-white" />
+                  <span>Unggah CSV Ranting</span>
+                  <input 
+                    type="file" 
+                    accept=".csv" 
+                    className="hidden" 
+                    onChange={handleRantingCSVUpload}
+                  />
+                </label>
+              ) : (
+                <span className="text-[10px] text-slate-400 font-semibold italic">Login admin untuk mengunggah CSV</span>
+              )}
+            </div>
+          </div>
+
+          {/* Success / Error Messages */}
+          {(csvRantingMessage || csvRantingError) && (
+            <div className="p-3 rounded-xl border text-xs font-semibold animate-pulse mt-2 bg-white">
+              {csvRantingMessage && <span className="text-emerald-700">{csvRantingMessage}</span>}
+              {csvRantingError && <span className="text-red-600">{csvRantingError}</span>}
+            </div>
+          )}
+        </div>
+
+        {/* Rantings Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredRantings.map((r) => {
+            const kaderCount = getKaderCount(r.id);
+            const activeBanomCount = r.id === 'mwc' ? 13 : (r.activeBanom?.length || 0);
+            const activeLembagaCount = r.id === 'mwc' ? 17 : (r.activeLembaga?.length || 0);
+            
+            return (
+              <div 
+                key={r.id} 
+                onClick={() => setSelectedRantingProfileId(r.id)}
+                className="group cursor-pointer bg-white rounded-2xl border border-gray-200 shadow-xs hover:border-tosca-400 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+              >
+                {/* Visual Header */}
+                <div className="relative h-28 bg-slate-100 overflow-hidden">
+                  <img
+                    src={r.imageUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'}
+                    alt={r.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                  <div className="absolute bottom-3 left-4 right-4 text-white">
+                    <span className={`inline-block px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider mb-1
+                      ${r.id === 'mwc' ? 'bg-tosca-500' : 'bg-emerald-600'}`}>
+                      {r.id === 'mwc' ? 'Tingkat Kecamatan' : 'Ranting Desa'}
+                    </span>
+                    <h3 className="text-xs md:text-sm font-display font-extrabold leading-tight truncate">{r.name}</h3>
+                  </div>
+                </div>
+
+                {/* Info and statistics */}
+                <div className="p-4.5 space-y-3 flex-1">
+                  <div className="grid grid-cols-2 gap-3 text-[10px] text-slate-500">
+                    <div>
+                      <span className="block text-slate-400 uppercase tracking-wider text-[8px] font-bold">Wilayah Desa</span>
+                      <span className="font-semibold text-slate-850 truncate block">{r.village}</span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-400 uppercase tracking-wider text-[8px] font-bold">Tahun Berdiri</span>
+                      <span className="font-semibold text-slate-850 truncate block">{r.established.split('-')[0]}</span>
+                    </div>
+                  </div>
+
+                  {/* Summary of Banom & Lembaga counts */}
+                  <div className="pt-2 border-t border-slate-50 grid grid-cols-3 gap-2 text-center">
+                    <div className="p-1 bg-slate-50 rounded-lg">
+                      <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Banom</span>
+                      <span className="text-xs font-bold text-emerald-700 font-mono">{activeBanomCount} Aktif</span>
+                    </div>
+                    <div className="p-1 bg-slate-50 rounded-lg">
+                      <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Lembaga</span>
+                      <span className="text-xs font-bold text-blue-700 font-mono">{activeLembagaCount} Aktif</span>
+                    </div>
+                    <div className="p-1 bg-slate-50 rounded-lg">
+                      <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Kader</span>
+                      <span className="text-xs font-bold text-tosca-700 font-mono">{kaderCount} Org</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer action */}
+                <div className="bg-gray-50/80 px-4.5 py-2.5 border-t border-gray-150 flex items-center justify-between text-xs font-semibold text-tosca-700 group-hover:bg-tosca-50/20 group-hover:text-tosca-800 transition-colors">
+                  <span>Buka Profil Lengkap →</span>
+                  <Building2 className="w-3.5 h-3.5 text-slate-350 group-hover:text-tosca-600 transition-colors" />
+                </div>
+              </div>
+            );
+          })}
+
+          {filteredRantings.length === 0 && (
             <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-gray-200">
-              <p className="text-xs text-slate-500 font-bold">Pengurus tidak ditemukan. Silakan ganti kata kunci.</p>
+              <p className="text-xs text-slate-500 font-bold">Kepengurusan tidak ditemukan. Silakan ganti kata kunci.</p>
             </div>
           )}
         </div>
@@ -586,10 +2008,31 @@ export default function PortalPages({
     const setSearchQuery = setKaderSearchQuery;
 
     const filteredKader = kaderList.filter(k => {
-      const matchesBanom = selectedBanom === 'Semua' || k.banom === selectedBanom;
+      const matchesBanom = selectedBanom === 'Semua' || 
+                           (selectedBanom === 'Pengurus Harian' && (
+                             (k.role && (
+                               k.role.toLowerCase().includes('syuriah') || 
+                               k.role.toLowerCase().includes('tanfidziyah') || 
+                               k.role.toLowerCase().includes('rais') || 
+                               k.role.toLowerCase().includes('ketua') || 
+                               k.role.toLowerCase().includes('sekretaris') || 
+                               k.role.toLowerCase().includes('bendahara') || 
+                               k.role.toLowerCase().includes('harian')
+                             )) || 
+                             (k.unsur && (
+                               k.unsur.toLowerCase().includes('harian') || 
+                               k.unsur.toLowerCase().includes('mwc') || 
+                               k.unsur.toLowerCase().includes('ranting') || 
+                               k.unsur.toLowerCase().includes('syuriah') || 
+                               k.unsur.toLowerCase().includes('tanfidziyah')
+                             ))
+                           )) ||
+                           k.banom === selectedBanom || 
+                           (k.unsur && k.unsur.toLowerCase().includes(selectedBanom.toLowerCase()));
       const matchesRanting = selectedRanting === 'Semua' || k.rantingId === selectedRanting;
       const matchesSearch = k.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            k.role.toLowerCase().includes(searchQuery.toLowerCase());
+                            (k.role && k.role.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                            (k.unsur && k.unsur.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesBanom && matchesRanting && matchesSearch;
     });
 
@@ -599,30 +2042,46 @@ export default function PortalPages({
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Unsur / Badan Otonom</label>
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Banom / Lembaga</label>
               <select
                 value={selectedBanom}
                 onChange={(e) => setSelectedBanom(e.target.value)}
                 className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 focus:bg-white text-slate-700 font-semibold"
               >
-                <option value="Semua">Semua Banom</option>
-                <option value="IPNU">IPNU (Pelajar Putra)</option>
-                <option value="IPPNU">IPPNU (Pelajar Putri)</option>
-                <option value="Ansor">GP Ansor (Pemuda)</option>
-                <option value="Fatayat">Fatayat NU (Wanita Muda)</option>
-                <option value="Muslimat">Muslimat NU (Ibu-Ibu)</option>
-                <option value="Banser">Banser (Barisan Ansor Serbaguna)</option>
+                <option value="Semua">Semua Banom & Lembaga</option>
+                <optgroup label="Pengurus Inti">
+                  <option value="Pengurus Harian">Pengurus Harian (Syuriah/Tanfidziyah)</option>
+                </optgroup>
+                <optgroup label="Badan Otonom (Banom)">
+                  <option value="Muslimat">Muslimat NU</option>
+                  <option value="Ansor">GP Ansor</option>
+                  <option value="Fatayat">Fatayat NU</option>
+                  <option value="IPNU">IPNU</option>
+                  <option value="IPPNU">IPPNU</option>
+                  <option value="Pagar Nusa">Pagar Nusa</option>
+                  <option value="Banser">Banser</option>
+                </optgroup>
+                <optgroup label="Lembaga-Lembaga NU">
+                  <option value="LAZISNU">LAZISNU</option>
+                  <option value="LTMNU">LTMNU</option>
+                  <option value="LDNU">LDNU</option>
+                  <option value="RMI-NU">RMI-NU</option>
+                  <option value="LPMNU">LPMNU (Ma'arif)</option>
+                  <option value="LWPNU">LWPNU</option>
+                  <option value="LAKPESDAM">LAKPESDAM</option>
+                </optgroup>
               </select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Wilayah Ranting</label>
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Wilayah (MWCNU & Ranting)</label>
               <select
                 value={selectedRanting}
                 onChange={(e) => setSelectedRanting(e.target.value)}
                 className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-hidden focus:ring-2 focus:ring-tosca-100 focus:border-tosca-500 focus:bg-white text-slate-700 font-semibold"
               >
-                <option value="Semua">Semua Ranting</option>
+                <option value="Semua">Semua Wilayah (30)</option>
+                <option value="mwc">MWC NU BUNGAH (Tingkat Kecamatan)</option>
                 {rantings.filter(r => r.id !== 'mwc').map(r => (
                   <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
@@ -643,6 +2102,46 @@ export default function PortalPages({
               </div>
             </div>
           </div>
+
+          {/* Sinergi CSV Bulk Importer/Exporter for Kaders */}
+          <div className="border-t border-dashed border-gray-100 pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50 -mx-5 -mb-5 p-4 rounded-b-2xl">
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Integrasi Data Kader Terpadu</span>
+              <p className="text-[11px] text-slate-500 font-semibold">Unduh template atau impor data kader Nahdlatul Ulama secara massal via berkas CSV.</p>
+            </div>
+            <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+              <button
+                onClick={downloadKaderCSVTemplate}
+                className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 transition-colors flex items-center space-x-1.5"
+                title="Unduh Template CSV Kader"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <span>Unduh Template</span>
+              </button>
+              {userRole !== 'guest' ? (
+                <label className="cursor-pointer px-3 py-1.5 bg-tosca-600 hover:bg-tosca-700 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 transition-colors shadow-xs">
+                  <Upload className="w-3.5 h-3.5 text-white" />
+                  <span>Unggah CSV Kader</span>
+                  <input 
+                    type="file" 
+                    accept=".csv" 
+                    className="hidden" 
+                    onChange={handleKaderCSVUpload}
+                  />
+                </label>
+              ) : (
+                <span className="text-[10px] text-slate-400 font-semibold italic">Login admin untuk mengunggah CSV</span>
+              )}
+            </div>
+          </div>
+
+          {/* Success / Error Messages */}
+          {(csvKaderMessage || csvKaderError) && (
+            <div className="p-3 rounded-xl border text-xs font-semibold animate-pulse mt-2 bg-white">
+              {csvKaderMessage && <span className="text-emerald-700">{csvKaderMessage}</span>}
+              {csvKaderError && <span className="text-red-600">{csvKaderError}</span>}
+            </div>
+          )}
         </div>
 
         {/* Total count indicator */}
@@ -664,7 +2163,7 @@ export default function PortalPages({
                 />
                 <div className="space-y-1 overflow-hidden">
                   <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-tosca-50 text-tosca-800 border border-tosca-100">
-                    {k.banom}
+                    {k.unsur || k.banom}
                   </span>
                   <h4 className="text-xs md:text-sm font-bold text-gray-900 leading-tight truncate">{k.name}</h4>
                   <p className="text-[11px] text-tosca-600 font-bold truncate">{k.role || 'Kader / Anggota'}</p>
@@ -677,12 +2176,16 @@ export default function PortalPages({
                   <span className="text-gray-700 font-semibold truncate block">{getRantingName(k.rantingId)}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block uppercase tracking-wider text-[8px] font-bold">Tahun Gabung</span>
-                  <span className="text-gray-700 font-semibold truncate block">{k.joinYear || '-'}</span>
+                  <span className="text-gray-400 block uppercase tracking-wider text-[8px] font-bold">Angkatan / Tahun</span>
+                  <span className="text-gray-700 font-semibold truncate block">{k.angkatan || k.joinYear || '-'}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 block uppercase tracking-wider text-[8px] font-bold">Jenis Kelamin</span>
                   <span className="text-gray-700 font-semibold truncate block">{k.gender}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block uppercase tracking-wider text-[8px] font-bold">Alamat</span>
+                  <span className="text-gray-700 font-semibold truncate block text-[10px]" title={k.address}>{k.address || '-'}</span>
                 </div>
                 <div className="col-span-2 pt-1 flex items-center space-x-1.5 text-gray-500">
                   <Phone className="w-3.5 h-3.5 text-tosca-600" />
@@ -1476,6 +2979,7 @@ export default function PortalPages({
                   <th className="px-6 py-3">Pengirim / Penerima</th>
                   <th className="px-6 py-3">Perihal</th>
                   <th className="px-6 py-3">Tembusan</th>
+                  <th className="px-6 py-3 text-center">Berkas / Akses</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1495,12 +2999,84 @@ export default function PortalPages({
                     <td className="px-6 py-4 text-slate-800 font-semibold">{s.senderOrRecipient}</td>
                     <td className="px-6 py-4 text-slate-600 font-medium">{s.subject}</td>
                     <td className="px-6 py-4 text-xs text-slate-400 italic truncate max-w-[150px]">{s.tembusan || '-'}</td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5">
+                        {/* Open Document Action */}
+                        {s.isPrivate ? (
+                          userRole !== 'guest' ? (
+                            <a
+                              href={s.attachmentUrl || '#'}
+                              target={s.attachmentUrl ? "_blank" : "_self"}
+                              rel="noreferrer"
+                              onClick={(e) => {
+                                if (!s.attachmentUrl) {
+                                  e.preventDefault();
+                                  const url = window.prompt("Belum ada berkas. Pengurus dapat memasukkan URL PDF/Foto surat di sini:", "");
+                                  if (url && setSuratList) {
+                                    setSuratList(prev => prev.map(item => item.id === s.id ? { ...item, attachmentUrl: url } : item));
+                                  }
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-bold flex items-center space-x-1 border border-amber-200 transition-colors cursor-pointer"
+                              title="Berkas Rahasia (Terbuka untuk Pengurus)"
+                            >
+                              <span>🔒</span>
+                              <span className="underline">{s.attachmentUrl ? "Buka Rahasia" : "Tambah Berkas"}</span>
+                            </a>
+                          ) : (
+                            <span className="px-2.5 py-1 bg-red-50 text-red-700 rounded-lg text-[10px] font-bold flex items-center space-x-1 border border-red-100">
+                              <span>🔒</span>
+                              <span>Rahasia Publik</span>
+                            </span>
+                          )
+                        ) : (
+                          <a
+                            href={s.attachmentUrl || '#'}
+                            target={s.attachmentUrl ? "_blank" : "_self"}
+                            rel="noreferrer"
+                            onClick={(e) => {
+                              if (!s.attachmentUrl) {
+                                e.preventDefault();
+                                if (userRole !== 'guest') {
+                                  const url = window.prompt("Belum ada berkas. Pengurus dapat memasukkan URL PDF/Foto surat di sini:", "");
+                                  if (url && setSuratList) {
+                                    setSuratList(prev => prev.map(item => item.id === s.id ? { ...item, attachmentUrl: url } : item));
+                                  }
+                                } else {
+                                  alert("Berkas fisik belum diunggah untuk surat ini.");
+                                }
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-tosca-50 text-tosca-700 hover:bg-tosca-100 rounded-lg text-xs font-bold flex items-center space-x-1 border border-tosca-100 transition-colors cursor-pointer"
+                          >
+                            <span>📄</span>
+                            <span className="underline">{s.attachmentUrl ? "Buka Berkas" : "Belum Ada Berkas"}</span>
+                          </a>
+                        )}
+
+                        {/* Privacy Toggle Action (Admin Only) */}
+                        {userRole !== 'guest' && setSuratList && (
+                          <button
+                            onClick={() => {
+                              setSuratList(prev => prev.map(item => item.id === s.id ? { ...item, isPrivate: !item.isPrivate } : item));
+                            }}
+                            className={`px-1.5 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer
+                              ${s.isPrivate 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                            title={s.isPrivate ? "Ubah ke Publik" : "Matikan/Rahasiakan dari Publik"}
+                          >
+                            {s.isPrivate ? "Set Publik" : "Set Rahasia"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
 
                 {filteredSurat.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-slate-400">
+                    <td colSpan={8} className="text-center py-12 text-slate-400">
                       Surat tidak ditemukan.
                     </td>
                   </tr>
@@ -1636,51 +3212,77 @@ export default function PortalPages({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {saranaIbadahList.map((si) => (
-            <div key={si.id} className="bg-white rounded-2xl border border-gray-200 shadow-xs p-5 flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-50 pb-3">
-                  <div>
-                    <span className="text-[10px] bg-tosca-50 text-tosca-700 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
-                      {si.type}
-                    </span>
-                    <h4 className="text-base font-bold text-slate-800 leading-snug mt-1">{si.name}</h4>
-                  </div>
-                  <Building className="w-5 h-5 text-slate-300" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
-                  <div>
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Ketua Takmir</span>
-                    <span className="font-bold text-slate-700">{si.takmir}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Asal Ranting</span>
-                    <span className="font-bold text-slate-700">{getRantingName(si.rantingId)}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Imam Utama 1</span>
-                    <span className="font-medium text-slate-600">{si.imam1}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Imam Utama 2</span>
-                    <span className="font-medium text-slate-600">{si.imam2}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Alamat Lengkap</span>
-                    <span className="text-slate-600 flex items-center mt-0.5"><MapPin className="w-3.5 h-3.5 text-slate-300 mr-1 shrink-0" />{si.address}</span>
-                  </div>
-                </div>
+            <div key={si.id} className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col justify-between">
+              {/* Card Photo */}
+              <div className="relative aspect-video w-full bg-slate-100 overflow-hidden group">
+                <img
+                  src={si.imageUrl || 'https://images.unsplash.com/photo-1597935258735-e254c1839512?w=800&auto=format&fit=crop&q=80'}
+                  alt={si.name}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                {userRole !== 'guest' && (
+                  <button
+                    onClick={() => {
+                      const newUrl = window.prompt("Ubah URL Foto Sarana Ibadah:", si.imageUrl || "");
+                      if (newUrl !== null && setSaranaIbadahList) {
+                        setSaranaIbadahList(prev => prev.map(item => item.id === si.id ? { ...item, imageUrl: newUrl } : item));
+                      }
+                    }}
+                    className="absolute top-3 right-3 bg-white/90 hover:bg-white text-slate-800 text-[10px] font-bold px-2.5 py-1.5 rounded-lg shadow-xs transition-all flex items-center space-x-1"
+                  >
+                    <Upload className="w-3 h-3 text-tosca-600" />
+                    <span>Ubah Foto</span>
+                  </button>
+                )}
               </div>
 
-              <div className="bg-slate-50 -mx-5 -mb-5 px-5 py-3.5 border-t border-slate-100 text-[10px] flex items-center justify-between rounded-b-2xl mt-4">
-                <div className="flex items-center space-x-1.5">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-slate-600 font-bold">Status Wakaf: <strong className="text-slate-800">{si.landStatus}</strong></span>
+              <div className="p-5 space-y-4 flex-1 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-50 pb-3">
+                    <div>
+                      <span className="text-[10px] bg-tosca-50 text-tosca-700 px-2 py-0.5 rounded uppercase font-bold tracking-wider">
+                        {si.type}
+                      </span>
+                      <h4 className="text-base font-bold text-slate-800 leading-snug mt-1">{si.name}</h4>
+                    </div>
+                    <Building className="w-5 h-5 text-slate-300" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Ketua Takmir</span>
+                      <span className="font-bold text-slate-700">{si.takmir}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Asal Ranting</span>
+                      <span className="font-bold text-slate-700">{getRantingName(si.rantingId)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Imam Utama 1</span>
+                      <span className="font-medium text-slate-600">{si.imam1}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Imam Utama 2</span>
+                      <span className="font-medium text-slate-600">{si.imam2}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Alamat Lengkap</span>
+                      <span className="text-slate-600 flex items-center mt-0.5"><MapPin className="w-3.5 h-3.5 text-slate-300 mr-1 shrink-0" />{si.address}</span>
+                    </div>
+                  </div>
                 </div>
-                <span className={`px-2 py-0.5 rounded font-bold
-                  ${si.nuAffiliation === 'Milik NU' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                  {si.nuAffiliation}
-                </span>
+
+                <div className="bg-slate-50 -mx-5 -mb-5 px-5 py-3.5 border-t border-slate-100 text-[10px] flex items-center justify-between rounded-b-2xl mt-4">
+                  <div className="flex items-center space-x-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-slate-600 font-bold">Status Wakaf: <strong className="text-slate-800">{si.landStatus}</strong></span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded font-bold
+                    ${si.nuAffiliation === 'Milik NU' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                    {si.nuAffiliation}
+                  </span>
+                </div>
               </div>
             </div>
           ))}
@@ -1750,51 +3352,77 @@ export default function PortalPages({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {saranaPendidikanList.map((sp) => (
-            <div key={sp.id} className="bg-white rounded-2xl border border-gray-200 shadow-xs p-5 flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-50 pb-3">
-                  <div>
-                    <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded uppercase font-bold tracking-wider mr-1.5">
-                      {sp.level}
-                    </span>
-                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded uppercase font-semibold">
-                      {sp.status}
-                    </span>
-                    <h4 className="text-base font-bold text-slate-800 leading-snug mt-1.5">{sp.name}</h4>
-                  </div>
-                  <BookOpen className="w-5 h-5 text-slate-300" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
-                  <div>
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Kepala Sekolah / Pimpinan</span>
-                    <span className="font-bold text-slate-700">{sp.principal}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Jumlah Siswa</span>
-                    <span className="font-bold text-slate-700 font-mono">{sp.studentCount} Siswa</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Hubungi Telp</span>
-                    <span className="text-slate-600 font-mono">{sp.phone || '-'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Kondisi Bangunan</span>
-                    <span className={`font-semibold flex items-center space-x-1
-                      ${sp.condition === 'Baik' ? 'text-emerald-600' : sp.condition === 'Butuh Renovasi' ? 'text-red-600 font-bold' : 'text-amber-600'}`}>
-                      {sp.condition === 'Baik' ? <CheckCircle className="w-3.5 h-3.5 inline mr-0.5" /> : <AlertTriangle className="w-3.5 h-3.5 inline mr-0.5" />}
-                      <span>{sp.condition}</span>
-                    </span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Alamat Lembaga</span>
-                    <span className="text-slate-600 flex items-center mt-0.5"><MapPin className="w-3.5 h-3.5 text-slate-300 mr-1 shrink-0" />{sp.address}</span>
-                  </div>
-                </div>
+            <div key={sp.id} className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col justify-between">
+              {/* Card Photo */}
+              <div className="relative aspect-video w-full bg-slate-100 overflow-hidden group">
+                <img
+                  src={sp.imageUrl || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=80'}
+                  alt={sp.name}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                {userRole !== 'guest' && (
+                  <button
+                    onClick={() => {
+                      const newUrl = window.prompt("Ubah URL Foto Sarana Pendidikan:", sp.imageUrl || "");
+                      if (newUrl !== null && setSaranaPendidikanList) {
+                        setSaranaPendidikanList(prev => prev.map(item => item.id === sp.id ? { ...item, imageUrl: newUrl } : item));
+                      }
+                    }}
+                    className="absolute top-3 right-3 bg-white/90 hover:bg-white text-slate-800 text-[10px] font-bold px-2.5 py-1.5 rounded-lg shadow-xs transition-all flex items-center space-x-1"
+                  >
+                    <Upload className="w-3 h-3 text-tosca-600" />
+                    <span>Ubah Foto</span>
+                  </button>
+                )}
               </div>
 
-              <div className="bg-slate-50 -mx-5 -mb-5 px-5 py-3 border-t border-slate-100 text-[10px] text-slate-500 rounded-b-2xl mt-4">
-                Asal Ranting: <strong className="text-slate-700">{getRantingName(sp.rantingId)}</strong>
+              <div className="p-5 space-y-4 flex-1 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-50 pb-3">
+                    <div>
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded uppercase font-bold tracking-wider mr-1.5">
+                        {sp.level}
+                      </span>
+                      <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded uppercase font-semibold">
+                        {sp.status}
+                      </span>
+                      <h4 className="text-base font-bold text-slate-800 leading-snug mt-1.5">{sp.name}</h4>
+                    </div>
+                    <BookOpen className="w-5 h-5 text-slate-300" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Kepala Sekolah / Pimpinan</span>
+                      <span className="font-bold text-slate-700">{sp.principal}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Jumlah Siswa</span>
+                      <span className="font-bold text-slate-700 font-mono">{sp.studentCount} Siswa</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Hubungi Telp</span>
+                      <span className="text-slate-600 font-mono">{sp.phone || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Kondisi Bangunan</span>
+                      <span className={`font-semibold flex items-center space-x-1
+                        ${sp.condition === 'Baik' ? 'text-emerald-600' : sp.condition === 'Butuh Renovasi' ? 'text-red-600 font-bold' : 'text-amber-600'}`}>
+                        {sp.condition === 'Baik' ? <CheckCircle className="w-3.5 h-3.5 inline mr-0.5 text-emerald-600" /> : <AlertTriangle className="w-3.5 h-3.5 inline mr-0.5 text-amber-600" />}
+                        <span>{sp.condition}</span>
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider">Alamat Lembaga</span>
+                      <span className="text-slate-600 flex items-center mt-0.5"><MapPin className="w-3.5 h-3.5 text-slate-300 mr-1 shrink-0" />{sp.address}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 -mx-5 -mb-5 px-5 py-3 border-t border-slate-100 text-[10px] text-slate-500 rounded-b-2xl mt-4">
+                  Asal Ranting: <strong className="text-slate-700">{getRantingName(sp.rantingId)}</strong>
+                </div>
               </div>
             </div>
           ))}
@@ -1983,7 +3611,15 @@ export default function PortalPages({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredGallery.map((d) => (
-            <div key={d.id} className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col justify-between hover:shadow-xs transition-shadow group">
+            <div 
+              key={d.id} 
+              onClick={() => {
+                setSelectedDokumentasi(d);
+                setActivePhotoIndex(0);
+                setNewPhotoInput('');
+              }}
+              className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col justify-between hover:shadow-md hover:border-tosca-200 cursor-pointer transition-all group"
+            >
               <div className="relative overflow-hidden">
                 <img 
                   src={d.url} 
@@ -1994,30 +3630,295 @@ export default function PortalPages({
                 <span className="absolute bottom-2 left-2 bg-slate-900/75 backdrop-blur-md text-white text-[9px] font-bold px-2.5 py-1 rounded-md">
                   {d.category}
                 </span>
+                <span className="absolute top-2 right-2 bg-tosca-600/90 text-white text-[9px] font-extrabold px-2 py-1 rounded-md flex items-center space-x-1 shadow-sm">
+                  <span>🖼️ Multi-Foto</span>
+                </span>
               </div>
-              <div className="p-4 space-y-1.5">
-                <h4 className="text-xs font-bold text-slate-800 line-clamp-1 leading-snug">{d.title}</h4>
-                <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+              <div className="p-4 space-y-1.5 flex-1 flex flex-col justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 line-clamp-1 leading-snug group-hover:text-tosca-600 transition-colors">{d.title}</h4>
+                  <p className="text-[10px] text-slate-400 mt-1">Klik untuk membuka galeri album ({d.additionalImages ? d.additionalImages.length + 1 : 10} foto)</p>
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono pt-2 border-t border-slate-50 mt-2">
                   <span>{d.date}</span>
                   <span className="text-tosca-600 font-bold uppercase">{d.type}</span>
                 </div>
               </div>
-              {d.driveUrl && (
-                <div className="px-4 pb-4">
-                  <a 
-                    href={d.driveUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="w-full inline-flex items-center justify-center space-x-1 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 font-bold text-[10px] py-2 rounded-xl transition-colors"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    <span>Lihat Album Drive</span>
-                  </a>
-                </div>
-              )}
             </div>
           ))}
         </div>
+
+        {/* Dynamic Multi-Photo Popup Lightbox Modal */}
+        {selectedDokumentasi && (() => {
+          const d = selectedDokumentasi;
+          
+          // Define category specific default photos to make sure there are always 5-10 high quality photos!
+          const fallbackMap: Record<string, string[]> = {
+            'Rapat': [
+              'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1431540015161-0bf868a2d407?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1531538606174-0f90ff5dce83?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1542744094-3a31f103e35f?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=800&auto=format&fit=crop&q=80'
+            ],
+            'Kegiatan': [
+              'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1523580494863-6f30312245d5?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1528605248644-14dd04022da1?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1531058020387-3be344559be6?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1469571486010-0b3b2793c5dd?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80'
+            ],
+            'Pelantikan': [
+              'https://images.unsplash.com/photo-1528605248644-14dd04022da1?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1523580494863-6f30312245d5?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1469571486010-0b3b2793c5dd?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1531058020387-3be344559be6?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80'
+            ],
+            'Harlah': [
+              'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1531058020387-3be344559be6?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1528605248644-14dd04022da1?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1515187029135-18ee286d815b?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1469571486010-0b3b2793c5dd?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=800&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80'
+            ]
+          };
+
+          const secondaryPhotos = d.additionalImages && d.additionalImages.length > 0 
+            ? d.additionalImages 
+            : (fallbackMap[d.category] || fallbackMap['Kegiatan']).slice(0, 9); // default 9 additional photos to make total 10!
+
+          const allPhotos = [d.url, ...secondaryPhotos].slice(0, 10); // Exactly 5-10 photos!
+          const activePhotoUrl = allPhotos[activePhotoIndex] || d.url;
+
+          return (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+              <div className="bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col md:flex-row">
+                
+                {/* Photo Stage (Left Side - 65%) */}
+                <div className="flex-1 bg-slate-950 relative flex items-center justify-center min-h-[300px] md:min-h-[500px]">
+                  <img
+                    src={activePhotoUrl}
+                    alt={`${d.title} - ${activePhotoIndex + 1}`}
+                    referrerPolicy="no-referrer"
+                    className="max-h-[550px] w-full object-contain"
+                  />
+                  
+                  {/* Close button inside image for easy mobile closing */}
+                  <button 
+                    onClick={() => setSelectedDokumentasi(null)}
+                    className="absolute top-4 left-4 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full shadow-md transition-colors"
+                  >
+                    ✕
+                  </button>
+
+                  {/* Stage navigation arrows */}
+                  {allPhotos.length > 1 && (
+                    <>
+                      <button
+                        onClick={() => setActivePhotoIndex(prev => (prev === 0 ? allPhotos.length - 1 : prev - 1))}
+                        className="absolute left-4 bg-black/55 hover:bg-black text-white p-3 rounded-full shadow-md hover:scale-105 transition-all text-sm font-bold"
+                      >
+                        ←
+                      </button>
+                      <button
+                        onClick={() => setActivePhotoIndex(prev => (prev === allPhotos.length - 1 ? 0 : prev + 1))}
+                        className="absolute right-4 bg-black/55 hover:bg-black text-white p-3 rounded-full shadow-md hover:scale-105 transition-all text-sm font-bold"
+                      >
+                        →
+                      </button>
+                    </>
+                  )}
+
+                  <div className="absolute bottom-4 bg-black/60 text-white text-xs font-mono px-3.5 py-1 rounded-full">
+                    Foto ke-{activePhotoIndex + 1} dari {allPhotos.length}
+                  </div>
+                </div>
+
+                {/* Details & Thumbnails (Right Side - 35%) */}
+                <div className="w-full md:w-80 bg-slate-50 p-6 flex flex-col justify-between overflow-y-auto max-h-[40vh] md:max-h-[600px] border-t md:border-t-0 md:border-l border-slate-200">
+                  <div className="space-y-5">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[10px] bg-tosca-50 text-tosca-700 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                          {d.category}
+                        </span>
+                        <h3 className="text-sm font-bold text-slate-800 leading-snug mt-1.5">{d.title}</h3>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedDokumentasi(null)}
+                        className="text-slate-400 hover:text-slate-600 font-bold text-lg p-1.5 hidden md:block"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="text-xs text-slate-500 font-semibold flex items-center space-x-1 border-b border-slate-100 pb-3">
+                      <span>Tanggal Unggah: {d.date}</span>
+                    </div>
+
+                    {/* Thumbnail Grid */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">
+                        Daftar Foto Album ({allPhotos.length})
+                      </span>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {allPhotos.map((photo, index) => (
+                          <div 
+                            key={index}
+                            onClick={() => setActivePhotoIndex(index)}
+                            className={`aspect-square rounded-lg overflow-hidden border-2 cursor-pointer relative group transition-all
+                              ${activePhotoIndex === index 
+                                ? 'border-tosca-500 scale-95 shadow-md' 
+                                : 'border-transparent hover:border-slate-300'}`}
+                          >
+                            <img
+                              src={photo}
+                              alt={`Thumbnail ${index + 1}`}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover"
+                            />
+                            {/* Delete Button for extra images (for admins only) */}
+                            {userRole !== 'guest' && index > 0 && setDokumentasiList && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm("Hapus foto sekunder ini dari album?")) {
+                                    const updatedSec = secondaryPhotos.filter((_, i) => i !== (index - 1));
+                                    setDokumentasiList(prev => prev.map(item => item.id === d.id ? { ...item, additionalImages: updatedSec } : item));
+                                    // Update our temporary selected object as well so it updates reactively in the popup
+                                    setSelectedDokumentasi({
+                                      ...d,
+                                      additionalImages: updatedSec
+                                    });
+                                    setActivePhotoIndex(0);
+                                  }
+                                }}
+                                className="absolute top-0.5 right-0.5 bg-red-600 hover:bg-red-700 text-white text-[8px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Hapus foto"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Drive URL Section */}
+                    <div className="space-y-1.5 pt-1.5">
+                      <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">
+                        Link Penyimpanan Berkas Eksternal
+                      </span>
+                      {d.driveUrl ? (
+                        <a
+                          href={d.driveUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold p-2.5 rounded-xl border border-emerald-100 transition-colors"
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span className="text-base font-normal">📁</span>
+                            <span>Buka Google Drive Album</span>
+                          </div>
+                          <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                        </a>
+                      ) : (
+                        <div className="text-[11px] text-slate-500 italic bg-slate-100 p-2.5 rounded-xl">
+                          Belum ada link Google Drive yang disematkan.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Admin controls to add secondary photos or change drive URL */}
+                  {userRole !== 'guest' && setDokumentasiList && (
+                    <div className="mt-6 pt-4 border-t border-slate-200 space-y-3.5 bg-slate-100/50 -mx-6 -mb-6 p-6 rounded-b-3xl">
+                      <div className="flex items-center space-x-1 text-tosca-700 font-bold text-xs uppercase tracking-wider">
+                        <span>⚙️</span>
+                        <span>Menu Pengurus (CMS)</span>
+                      </div>
+                      
+                      {/* Add photo input */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-slate-500 font-bold block uppercase tracking-wide">Tambah URL Foto Baru (5-10 Foto)</label>
+                        <div className="flex space-x-1">
+                          <input
+                            type="text"
+                            placeholder="https://images.unsplash.com/..."
+                            value={newPhotoInput}
+                            onChange={(e) => setNewPhotoInput(e.target.value)}
+                            className="flex-1 text-[11px] bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden"
+                          />
+                          <button
+                            onClick={() => {
+                              if (!newPhotoInput.trim()) return;
+                              const updatedSec = [...(d.additionalImages || []), newPhotoInput.trim()];
+                              setDokumentasiList(prev => prev.map(item => item.id === d.id ? { ...item, additionalImages: updatedSec } : item));
+                              setSelectedDokumentasi({
+                                ...d,
+                                additionalImages: updatedSec
+                              });
+                              setNewPhotoInput('');
+                              setActivePhotoIndex(updatedSec.length); // switch to the newly added photo!
+                            }}
+                            className="bg-tosca-600 hover:bg-tosca-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            Tambah
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Drive URL update input */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-slate-500 font-bold block uppercase tracking-wide">Ubah Link Google Drive</label>
+                        <div className="flex space-x-1">
+                          <input
+                            type="text"
+                            placeholder="https://drive.google.com/..."
+                            defaultValue={d.driveUrl || ''}
+                            onBlur={(e) => {
+                              const updatedUrl = e.target.value.trim();
+                              setDokumentasiList(prev => prev.map(item => item.id === d.id ? { ...item, driveUrl: updatedUrl } : item));
+                              setSelectedDokumentasi({
+                                ...d,
+                                driveUrl: updatedUrl
+                              });
+                            }}
+                            className="flex-1 text-[11px] bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden"
+                          />
+                        </div>
+                        <span className="text-[8px] text-slate-400 block mt-0.5">Sistem menyimpan otomatis saat Anda mengklik di luar kotak input.</span>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   };

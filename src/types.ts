@@ -6,17 +6,34 @@ export interface User {
   rantingId?: string; // If admin_ranting, specifies which ranting they belong to
 }
 
+export interface SKDocument {
+  id: string;
+  number: string;
+  period: string;
+  fileUrl: string;
+  uploadDate: string;
+  isLatest?: boolean;
+}
+
 export interface Ranting {
   id: string;
   name: string; // e.g., "PRNU Bungah", "PRNU Sidorejo", etc.
   village: string;
   established: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  imageUrl?: string;
+  activeBanom?: string[];
+  activeLembaga?: string[];
+  skDocs?: SKDocument[];
+  history?: string;
 }
 
 export interface Pengurus {
   id: string;
   name: string;
-  role: string; // e.g., "Syuriah", "Tanfidziyah", "Ketua", "Sekretaris"
+  role: string; // e.g., "Syuriah", "Tanfidziyah", "Ketua", "Sekretaris", "Ketua Ansor" etc.
   category: 'MWC' | 'Ranting';
   rantingId?: string;
   phone: string;
@@ -24,6 +41,8 @@ export interface Pengurus {
   kaderisasiStatus: string; // e.g., "MKNU", "PD-PKPNU", "Belum"
   education: string; // e.g., "S1", "S2", "SMA", "Pesantren"
   photoUrl?: string;
+  groupType?: 'Harian' | 'Banom' | 'Lembaga';
+  groupName?: string; // name of Banom (e.g. "GP Ansor", "Fatayat NU") or Lembaga (e.g. "LAZISNU")
 }
 
 export interface Kader {
@@ -38,6 +57,9 @@ export interface Kader {
   phone: string;
   joinYear: number;
   photoUrl?: string;
+  unsur?: string; // Unsur / Organisasi dari CSV
+  address?: string; // Alamat lengkap
+  angkatan?: string; // Angkatan kaderisasi (misal: XXXV)
 }
 
 export interface Kegiatan {
@@ -85,6 +107,7 @@ export interface Persuratan {
   subject: string;
   attachmentUrl?: string;
   tembusan?: string;
+  isPrivate?: boolean;
 }
 
 export interface Usaha {
@@ -145,6 +168,7 @@ export interface Dokumentasi {
   date: string;
   category: 'Kegiatan' | 'Rapat' | 'Pelantikan' | 'Harlah';
   driveUrl?: string;
+  additionalImages?: string[];
 }
 
 export interface Aspirasi {

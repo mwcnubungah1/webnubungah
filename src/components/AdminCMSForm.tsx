@@ -6,6 +6,7 @@ import {
   SaranaIbadah, SaranaPendidikan, Berita, Dokumentasi, Aspirasi, Pengurus
 } from '../types';
 import { isCloudinaryConfigured, uploadToCloudinary } from '../lib/cloudinaryClient';
+import { mapUnsurToBanom, mapAngkatanToYear } from '../data/mockData';
 
 interface AdminCMSFormProps {
   activeModel: ModelType;
@@ -95,7 +96,8 @@ export default function AdminCMSForm({
       const defaultData: Record<string, any> = {
         kader: {
           name: '', pob: 'Gresik', dob: '2000-01-01', gender: 'Laki-laki',
-          banom: 'Ansor', role: '', rantingId: 'r1', phone: '', joinYear: 2020, photoUrl: ''
+          banom: 'Ansor', role: '', rantingId: 'r1', phone: '', joinYear: 2020, photoUrl: '',
+          unsur: 'GP Ansor', address: '', angkatan: 'XXXV'
         },
         kegiatan: {
           title: '', date: nowStr, location: '', organizer: 'MWC NU Bungah',
@@ -139,7 +141,8 @@ export default function AdminCMSForm({
         },
         pengurus: {
           name: '', role: 'Tanfidziyah', category: 'MWC', rantingId: 'r1',
-          phone: '', email: '', kaderisasiStatus: 'PD-PKPNU', education: 'S1', photoUrl: ''
+          phone: '', email: '', kaderisasiStatus: 'PD-PKPNU', education: 'S1', photoUrl: '',
+          groupType: 'Harian', groupName: ''
         }
       };
       setFormData(defaultData[activeModel] || {});
@@ -272,43 +275,42 @@ export default function AdminCMSForm({
         {activeModel === 'kader' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Nama Lengkap *</label>
-              <input type="text" required value={formData.name || ''} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" />
+              <label className="font-semibold text-slate-600">1. Nama Lengkap *</label>
+              <input type="text" required value={formData.name || ''} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Nama Lengkap" />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Tempat Lahir</label>
-              <input type="text" value={formData.pob || ''} onChange={(e) => updateField('pob', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" />
+              <label className="font-semibold text-slate-600">2. Tempat Lahir</label>
+              <input type="text" value={formData.pob || ''} onChange={(e) => updateField('pob', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Contoh: Gresik" />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Tanggal Lahir</label>
+              <label className="font-semibold text-slate-600">3. Tanggal Lahir</label>
               <input type="date" value={formData.dob || ''} onChange={(e) => updateField('dob', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Jenis Kelamin</label>
-              <select value={formData.gender || 'Laki-laki'} onChange={(e) => updateField('gender', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
-                <option value="Laki-laki">Laki-laki</option>
-                <option value="Perempuan">Perempuan</option>
-              </select>
+              <label className="font-semibold text-slate-600">4. Unsur *</label>
+              <input 
+                type="text" 
+                required
+                value={formData.unsur || ''} 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateField('unsur', val);
+                  updateField('banom', mapUnsurToBanom(val));
+                }} 
+                className="w-full bg-white border border-slate-200 rounded p-2" 
+                placeholder="Contoh: PC LPBI SERNU, GP Ansor, PAC Fatayat NU" 
+              />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Banom</label>
-              <select value={formData.banom || 'Ansor'} onChange={(e) => updateField('banom', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-semibold">
-                <option value="IPNU">IPNU</option>
-                <option value="IPPNU">IPPNU</option>
-                <option value="Ansor">Ansor</option>
-                <option value="Fatayat">Fatayat</option>
-                <option value="Muslimat">Muslimat</option>
-                <option value="Banser">Banser</option>
-                <option value="Pagar Nusa">Pagar Nusa</option>
-                <option value="Lainnya">Lainnya</option>
-              </select>
+              <label className="font-semibold text-slate-600">5. Jabatan *</label>
+              <input type="text" required value={formData.role || ''} onChange={(e) => updateField('role', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Contoh: KETUA, SEKRETARIS, ANGGOTA" />
+            </div>
+            <div className="space-y-1 col-span-1 sm:col-span-2">
+              <label className="font-semibold text-slate-600">6. Alamat</label>
+              <input type="text" value={formData.address || ''} onChange={(e) => updateField('address', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Contoh: Dusun Kaliwot RT 19B RW 07" />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Jabatan di Organisasi *</label>
-              <input type="text" required value={formData.role || ''} onChange={(e) => updateField('role', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" />
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Ranting Desa</label>
+              <label className="font-semibold text-slate-600">7. Ranting Desa</label>
               <select value={formData.rantingId || 'r1'} onChange={(e) => updateField('rantingId', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
                 <option value="mwc">MWC (Tingkat Kecamatan)</option>
                 {rantings.filter(r => r.id !== 'mwc').map(r => (
@@ -317,12 +319,29 @@ export default function AdminCMSForm({
               </select>
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">No. HP / WA *</label>
-              <input type="text" required value={formData.phone || ''} onChange={(e) => updateField('phone', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" />
+              <label className="font-semibold text-slate-600">8. No. HP / WA *</label>
+              <input type="text" required value={formData.phone || ''} onChange={(e) => updateField('phone', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" placeholder="Contoh: 085755920527" />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Tahun Bergabung</label>
-              <input type="number" value={formData.joinYear || 2020} onChange={(e) => updateField('joinYear', parseInt(e.target.value) || 2020)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" />
+              <label className="font-semibold text-slate-600">9. Jenis Kelamin</label>
+              <select value={formData.gender || 'Laki-laki'} onChange={(e) => updateField('gender', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
+                <option value="Laki-laki">Laki-laki</option>
+                <option value="Perempuan">Perempuan</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="font-semibold text-slate-600">10. Angkatan</label>
+              <input 
+                type="text" 
+                value={formData.angkatan || ''} 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateField('angkatan', val);
+                  updateField('joinYear', mapAngkatanToYear(val));
+                }} 
+                className="w-full bg-white border border-slate-200 rounded p-2 font-semibold" 
+                placeholder="Contoh: XXXV, III, XL" 
+              />
             </div>
             {renderUploader('photoUrl')}
           </div>
@@ -334,20 +353,18 @@ export default function AdminCMSForm({
               <label className="font-semibold text-slate-600">Nama Lengkap *</label>
               <input type="text" required value={formData.name || ''} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" />
             </div>
+            
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Jabatan di Organisasi *</label>
-              <input type="text" required value={formData.role || ''} onChange={(e) => updateField('role', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Contoh: Syuriah, Tanfidziyah, Ketua, Sekretaris" />
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Tingkatan Pengurus</label>
+              <label className="font-semibold text-slate-600">Tingkatan Pengurus *</label>
               <select value={formData.category || 'MWC'} onChange={(e) => updateField('category', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
                 <option value="MWC">MWC (Tingkat Kecamatan)</option>
                 <option value="Ranting">Ranting (Tingkat Desa)</option>
               </select>
             </div>
+
             {formData.category === 'Ranting' && (
               <div className="space-y-1">
-                <label className="font-semibold text-slate-600">Ranting Desa</label>
+                <label className="font-semibold text-slate-600">Ranting Desa *</label>
                 <select value={formData.rantingId || 'r1'} onChange={(e) => updateField('rantingId', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
                   {rantings.filter(r => r.id !== 'mwc').map(r => (
                     <option key={r.id} value={r.id}>{r.name}</option>
@@ -355,13 +372,142 @@ export default function AdminCMSForm({
                 </select>
               </div>
             )}
+
+            <div className="space-y-1">
+              <label className="font-semibold text-slate-600">Kategori Struktur (Harian / Banom / Lembaga) *</label>
+              <select 
+                value={formData.groupType || 'Harian'} 
+                onChange={(e) => {
+                  const gt = e.target.value as 'Harian' | 'Banom' | 'Lembaga';
+                  updateField('groupType', gt);
+                  if (gt === 'Harian') {
+                    updateField('groupName', '');
+                  } else if (gt === 'Banom') {
+                    updateField('groupName', 'GP Ansor');
+                  } else if (gt === 'Lembaga') {
+                    updateField('groupName', 'LAZISNU');
+                  }
+                }} 
+                className="w-full bg-white border border-slate-200 rounded p-2 font-semibold text-slate-700"
+              >
+                <option value="Harian">Pengurus Harian</option>
+                <option value="Banom">Badan Otonom (Banom)</option>
+                <option value="Lembaga">Lembaga NU</option>
+              </select>
+            </div>
+
+            {formData.groupType === 'Banom' && (
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-600">Pilih Badan Otonom (Banom) *</label>
+                <select 
+                  value={
+                    ["GP Ansor", "Fatayat NU", "Muslimat NU", "IPNU", "IPPNU", "Pagar Nusa", "ISNU", "PERGUNU", "JATMAN", "SARBUMUSI"].includes(formData.groupName || '')
+                      ? formData.groupName 
+                      : 'Lainnya'
+                  } 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'Lainnya') {
+                      updateField('groupName', 'Kustom Banom');
+                    } else {
+                      updateField('groupName', val);
+                    }
+                  }}
+                  className="w-full bg-white border border-slate-200 rounded p-2"
+                >
+                  <option value="GP Ansor">GP Ansor</option>
+                  <option value="Fatayat NU">Fatayat NU</option>
+                  <option value="Muslimat NU">Muslimat NU</option>
+                  <option value="IPNU">IPNU</option>
+                  <option value="IPPNU">IPPNU</option>
+                  <option value="Pagar Nusa">Pagar Nusa</option>
+                  <option value="ISNU">ISNU</option>
+                  <option value="PERGUNU">PERGUNU</option>
+                  <option value="JATMAN">JATMAN</option>
+                  <option value="SARBUMUSI">SARBUMUSI</option>
+                  <option value="Lainnya">Lainnya (Kustom / Tulis Sendiri)</option>
+                </select>
+                
+                {!["GP Ansor", "Fatayat NU", "Muslimat NU", "IPNU", "IPPNU", "Pagar Nusa", "ISNU", "PERGUNU", "JATMAN", "SARBUMUSI"].includes(formData.groupName || '') && (
+                  <div className="mt-2 animate-fadeIn">
+                    <label className="text-[10px] text-slate-500 font-semibold">Tulis Nama Banom Kustom *</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={formData.groupName || ''} 
+                      onChange={(e) => updateField('groupName', e.target.value)} 
+                      placeholder="Contoh: CBP IPNU, KPP IPPNU" 
+                      className="w-full bg-white border border-slate-200 rounded p-2 text-xs font-medium mt-0.5" 
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {formData.groupType === 'Lembaga' && (
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-600">Pilih Lembaga NU *</label>
+                <select 
+                  value={
+                    ["LAZISNU", "LP Ma'arif NU", "LTMNU", "LDNU", "RMI NU", "LKNU", "LAKPESDAM NU", "LESBUMI", "LPBI NU", "LWPNU", "LPBHNU", "LPPNU", "LTN NU", "LKKNU"].includes(formData.groupName || '')
+                      ? formData.groupName 
+                      : 'Lainnya'
+                  } 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'Lainnya') {
+                      updateField('groupName', 'Kustom Lembaga');
+                    } else {
+                      updateField('groupName', val);
+                    }
+                  }}
+                  className="w-full bg-white border border-slate-200 rounded p-2"
+                >
+                  <option value="LAZISNU">LAZISNU</option>
+                  <option value="LP Ma'arif NU">LP Ma'arif NU</option>
+                  <option value="LTMNU">LTMNU</option>
+                  <option value="LDNU">LDNU</option>
+                  <option value="RMI NU">RMI NU</option>
+                  <option value="LKNU">LKNU</option>
+                  <option value="LAKPESDAM NU">LAKPESDAM NU</option>
+                  <option value="LESBUMI">LESBUMI</option>
+                  <option value="LPBI NU">LPBI NU</option>
+                  <option value="LWPNU">LWPNU</option>
+                  <option value="LPBHNU">LPBHNU</option>
+                  <option value="LPPNU">LPPNU</option>
+                  <option value="LTN NU">LTN NU</option>
+                  <option value="LKKNU">LKKNU</option>
+                  <option value="Lainnya">Lainnya (Kustom / Tulis Sendiri)</option>
+                </select>
+
+                {!["LAZISNU", "LP Ma'arif NU", "LTMNU", "LDNU", "RMI NU", "LKNU", "LAKPESDAM NU", "LESBUMI", "LPBI NU", "LWPNU", "LPBHNU", "LPPNU", "LTN NU", "LKKNU"].includes(formData.groupName || '') && (
+                  <div className="mt-2 animate-fadeIn">
+                    <label className="text-[10px] text-slate-500 font-semibold">Tulis Nama Lembaga Kustom *</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={formData.groupName || ''} 
+                      onChange={(e) => updateField('groupName', e.target.value)} 
+                      placeholder="Contoh: Lembaga Falakiyah NU" 
+                      className="w-full bg-white border border-slate-200 rounded p-2 text-xs font-medium mt-0.5" 
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="font-semibold text-slate-600">Jabatan / Peran di Struktur *</label>
+              <input type="text" required value={formData.role || ''} onChange={(e) => updateField('role', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Contoh: Rois Syuriyah, Ketua, Sekretaris, Bendahara, Anggota" />
+            </div>
+
             <div className="space-y-1">
               <label className="font-semibold text-slate-600">No. HP / WA *</label>
-              <input type="text" required value={formData.phone || ''} onChange={(e) => updateField('phone', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" />
+              <input type="text" required value={formData.phone || ''} onChange={(e) => updateField('phone', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" placeholder="Contoh: 081234567890" />
             </div>
             <div className="space-y-1">
               <label className="font-semibold text-slate-600">Email</label>
-              <input type="email" value={formData.email || ''} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" />
+              <input type="email" value={formData.email || ''} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" placeholder="Contoh: mail@domain.com" />
             </div>
             <div className="space-y-1">
               <label className="font-semibold text-slate-600">Status Kaderisasi</label>
@@ -370,6 +516,7 @@ export default function AdminCMSForm({
                 <option value="PD-PKPNU">PD-PKPNU</option>
                 <option value="PMKNU">PMKNU</option>
                 <option value="MKNU">MKNU</option>
+                <option value="Penyetaraan">Penyetaraan</option>
               </select>
             </div>
             <div className="space-y-1">
