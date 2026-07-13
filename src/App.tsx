@@ -47,7 +47,7 @@ import {
   mockAspirasi 
 } from './data/mockData';
 
-import { isSupabaseConfigured, fetchTableData, insertTableData } from './lib/supabaseClient';
+import { isSupabaseConfigured, fetchTableData, insertTableData, supabase } from './lib/supabaseClient';
 
 // Modular layouts
 import Sidebar from './components/Sidebar';
@@ -243,10 +243,18 @@ export default function App() {
   };
 
   // Handler: Simulate Logout
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.warn("Supabase signOut error:", e);
+      }
+    }
     setUserRole('guest');
     setSelectedRantingId('mwc');
     setActiveTab('home');
+    setSuratList([]); // Clear private document list on logout
   };
 
   // Path-based client-side routing synchronization

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, CheckCircle, AlertCircle, Mail, Key } from 'lucide-react';
 import { Role } from '../types';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 interface LoginViewProps {
   setUserRole: (role: Role) => void;
@@ -17,30 +18,73 @@ export default function LoginView({
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError(null);
     
+    let targetRole: Role = 'guest';
+    let targetRantingId = 'mwc';
+
     if (email === 'maghfurmunif@gmail.com' && password === 'mwc123') {
-      setUserRole('super_admin');
-      setSelectedRantingId('mwc');
-      setSuccess(true);
-      setError(null);
-      setTimeout(() => {
-        setActiveTab('admin');
-      }, 1500);
+      targetRole = 'super_admin';
     } else if (email === 'ahmadazkia@gmail.com' && password === 'nubungah2026') {
-      setUserRole('admin_lazisnu');
-      setSelectedRantingId('mwc');
-      setSuccess(true);
-      setError(null);
-      setTimeout(() => {
-        setActiveTab('admin');
-      }, 1500);
+      targetRole = 'admin_lazisnu';
     } else {
       setError('Kombinasi Email dan Password sandi salah! Hubungi MWC NU Bungah jika Anda belum memiliki akun.');
       setSuccess(false);
+      setIsLoading(false);
+      return;
     }
+
+    // Try to login via Supabase Auth
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) {
+          // If user doesn't exist, try signing up automatically so they can log in seamlessly
+          if (signInError.message?.toLowerCase().includes('invalid login credentials') || signInError.status === 400) {
+            const { error: signUpError } = await supabase.auth.signUp({
+              email,
+              password,
+              options: {
+                data: {
+                  role: targetRole,
+                }
+              }
+            });
+
+            if (signUpError) {
+              console.warn("Supabase auto-signUp failed:", signUpError.message);
+              // Do not block login in-memory even if signup fails (e.g. email confirmation required but not confirmed)
+            } else {
+              console.log("Supabase auto-signUp successful for:", email);
+            }
+          } else {
+            console.warn("Supabase signIn failed:", signInError.message);
+          }
+        } else {
+          console.log("Supabase signIn successful for:", email);
+        }
+      } catch (authErr: any) {
+        console.warn("Supabase connection exception:", authErr);
+      }
+    }
+
+    setUserRole(targetRole);
+    setSelectedRantingId(targetRantingId);
+    setSuccess(true);
+    setIsLoading(false);
+    setError(null);
+    setTimeout(() => {
+      setActiveTab('admin');
+    }, 1500);
   };
 
   return (
@@ -101,9 +145,20 @@ export default function LoginView({
 
           <button
             type="submit"
-            className="w-full py-2.5 bg-tosca-600 hover:bg-tosca-700 text-white font-bold rounded-xl shadow-lg shadow-teal-100 transition-all text-xs cursor-pointer"
+            disabled={isLoading || success}
+            className="w-full py-2.5 bg-tosca-600 hover:bg-tosca-700 disabled:bg-gray-400 text-white font-bold rounded-xl shadow-lg shadow-teal-100 transition-all text-xs cursor-pointer flex items-center justify-center space-x-2"
           >
-            Autentikasi Masuk Portal
+            {isLoading ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <span>Memverifikasi Sandi...</span>
+              </>
+            ) : (
+              <span>Autentikasi Masuk Portal</span>
+            )}
           </button>
         </form>
       </div>

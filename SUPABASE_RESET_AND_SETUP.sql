@@ -251,6 +251,8 @@ CREATE POLICY "Arus Kas dapat dilihat oleh publik secara transparan" ON public.k
 CREATE POLICY "Arus Kas dapat dikelola oleh pengurus terautentikasi" ON public.kas_dana FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Kebijakan: KOIN_S3
+DROP POLICY IF EXISTS "Laporan Koin S3 dapat dilihat oleh publik secara transparan" ON public.koin_s3;
+DROP POLICY IF EXISTS "Laporan Koin S3 dapat dikelola oleh pengurus terautentikasi" ON public.koin_s3;
 CREATE POLICY "Laporan Koin S3 dapat dilihat oleh publik secara transparan" ON public.koin_s3 FOR SELECT TO public USING (true);
 CREATE POLICY "Laporan Koin S3 dapat dikelola oleh pengurus terautentikasi" ON public.koin_s3 FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
