@@ -32,6 +32,7 @@ import {
 } from '../types';
 import { 
   isSupabaseConfigured, 
+  supabase,
   insertTableData, 
   updateTableData, 
   deleteTableData 
@@ -361,7 +362,7 @@ export default function AdminCMS({
 
     try {
       let deletedFromCloud = true;
-      if (isSupabaseConfigured && !isNaN(Number(id))) {
+      if (isSupabaseConfigured) {
         try {
           await deleteTableData(activeModel, id);
         } catch (dbErr: any) {
@@ -482,12 +483,15 @@ export default function AdminCMS({
         // EDIT MODE
         let updatedItem = { ...data };
         let savedToCloud = true;
-        if (isSupabaseConfigured) {
+        if (isSupabaseConfigured && supabase) {
           try {
-            if (isNaN(Number(editItemId))) {
-              updatedItem = await insertTableData(activeModel, data);
-            } else {
+            // First try UPDATE — if the row doesn't exist in Supabase, fall back to INSERT
+            try {
               updatedItem = await updateTableData(activeModel, editItemId, data);
+            } catch (updateErr: any) {
+              // If update failed (row not found), insert as new record
+              console.warn("Supabase update failed (row may not exist), inserting new:", updateErr?.message);
+              updatedItem = await insertTableData(activeModel, data);
             }
           } catch (dbErr: any) {
             console.warn("Supabase write failed, falling back to local storage:", dbErr);

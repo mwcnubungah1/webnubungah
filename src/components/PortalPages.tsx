@@ -29,7 +29,10 @@ import {
   Sparkles,
   Download,
   Upload,
-  Trash2
+  Trash2,
+  Pencil,
+  Save,
+  XCircle
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -133,6 +136,34 @@ export default function PortalPages({
   const [tempPhotoUrl, setTempPhotoUrl] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadPhotoError, setUploadPhotoError] = useState<string | null>(null);
+
+  // State for inline editing of Tahun Berdiri in Profil Jamiyah
+  const [editingEstablished, setEditingEstablished] = useState(false);
+  const [editingEstablishedValue, setEditingEstablishedValue] = useState('');
+
+  // Ranting edit/delete handlers
+  const handleEditRantingField = (rantingId: string, field: string, value: string) => {
+    if (!setRantings) return;
+    setRantings(prev => {
+      const updated = prev.map(r => r.id === rantingId ? { ...r, [field]: value } : r);
+      localStorage.setItem('mwc_nu_rantings', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleDeleteRanting = (rantingId: string, rantingName: string) => {
+    if (!setRantings) return;
+    if (rantingId === 'mwc') {
+      alert('Tidak dapat menghapus data MWC NU Bungah.');
+      return;
+    }
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus profil "${rantingName}" secara permanen?`)) return;
+    setRantings(prev => {
+      const updated = prev.filter(r => r.id !== rantingId);
+      localStorage.setItem('mwc_nu_rantings', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const handleFileUpload = async (file: File) => {
     try {
@@ -960,45 +991,27 @@ export default function PortalPages({
       // Computations for Harian, Banoms, and Lembagas
       const rPengurusHarian = rPengurus.filter(p => p.groupType === 'Harian' || !p.groupType);
 
-      // Find all active/populated Banom with their members
-      const banomPengurus = rPengurus.filter(p => p.groupType === 'Banom' && p.groupName);
-      const banomGrouped: { [key: string]: Pengurus[] } = {};
-      banomPengurus.forEach(p => {
-        const gName = p.groupName || 'Lainnya';
-        if (!banomGrouped[gName]) {
-          banomGrouped[gName] = [];
-        }
-        banomGrouped[gName].push(p);
-      });
-
-      const activeBanomsWithMembers = Object.keys(banomGrouped).map(groupName => {
-        const def = banomDefinitions.find(d => d.id === groupName);
+      // Build Banom list from ranting.activeBanom (source of truth) + pengurus members
+      const activeBanomsWithMembers = (ranting.activeBanom || []).map(banomName => {
+        const def = banomDefinitions.find(d => d.id === banomName);
+        const members = rPengurus.filter(p => p.groupType === 'Banom' && p.groupName === banomName);
         return {
-          id: groupName,
-          name: def ? def.name : groupName,
+          id: banomName,
+          name: def ? def.name : banomName,
           desc: def ? def.desc : 'Badan Otonom NU tingkat Ranting.',
-          members: banomGrouped[groupName]
+          members
         };
       });
 
-      // Find all active/populated Lembaga with their members
-      const lembagaPengurus = rPengurus.filter(p => p.groupType === 'Lembaga' && p.groupName);
-      const lembagaGrouped: { [key: string]: Pengurus[] } = {};
-      lembagaPengurus.forEach(p => {
-        const gName = p.groupName || 'Lainnya';
-        if (!lembagaGrouped[gName]) {
-          lembagaGrouped[gName] = [];
-        }
-        lembagaGrouped[gName].push(p);
-      });
-
-      const activeLembagasWithMembers = Object.keys(lembagaGrouped).map(groupName => {
-        const def = lembagaDefinitions.find(d => d.id === groupName);
+      // Build Lembaga list from ranting.activeLembaga (source of truth) + pengurus members
+      const activeLembagasWithMembers = (ranting.activeLembaga || []).map(lembagaName => {
+        const def = lembagaDefinitions.find(d => d.id === lembagaName);
+        const members = rPengurus.filter(p => p.groupType === 'Lembaga' && p.groupName === lembagaName);
         return {
-          id: groupName,
-          name: def ? def.name : groupName,
+          id: lembagaName,
+          name: def ? def.name : lembagaName,
           desc: def ? def.desc : 'Lembaga Nahdlatul Ulama tingkat Ranting.',
-          members: lembagaGrouped[groupName]
+          members
         };
       });
 
@@ -1014,7 +1027,21 @@ export default function PortalPages({
             </button>
             <div>
               <span className="text-[10px] font-bold text-tosca-700 uppercase tracking-wider block">Profil Detil Jamiyah</span>
-              <h2 className="text-lg md:text-xl font-display font-extrabold text-gray-900">{ranting.name}</h2>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-lg md:text-xl font-display font-extrabold text-gray-900">{ranting.name}</h2>
+                {userRole && userRole !== 'guest' && (
+                  <button
+                    onClick={() => {
+                      const newName = window.prompt('Ubah Nama Kepengurusan:', ranting.name);
+                      if (newName !== null && newName.trim()) handleEditRantingField(ranting.id, 'name', newName.trim());
+                    }}
+                    className="p-1 rounded-md hover:bg-tosca-50 text-slate-400 hover:text-tosca-600 transition-colors border border-slate-200 hover:border-tosca-200"
+                    title="Ubah Nama"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1072,6 +1099,27 @@ export default function PortalPages({
                       <div>
                         <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Email Resmi</span>
                         <span className="font-semibold text-slate-800">{ranting.email || `${ranting.village.toLowerCase().replace(/\s+/g, '')}@mwcnubungah.or.id`}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-3">
+                      <Clock className="w-4 h-4 text-tosca-600 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Tahun Berdiri</span>
+                          {userRole && userRole !== 'guest' && (
+                            <button
+                              onClick={() => {
+                                const newYear = window.prompt('Ubah Tahun Berdiri (format: YYYY-MM-DD):', ranting.established);
+                                if (newYear !== null && newYear.trim()) handleEditRantingField(ranting.id, 'established', newYear.trim());
+                              }}
+                              className="text-[9px] font-bold text-tosca-600 hover:text-tosca-700 bg-tosca-50 px-1.5 py-0.5 rounded border border-tosca-100 transition-all"
+                            >
+                              Ubah
+                            </button>
+                          )}
+                        </div>
+                        <span className="font-semibold text-slate-800">{ranting.established}</span>
                       </div>
                     </div>
                   </div>
@@ -1362,7 +1410,10 @@ export default function PortalPages({
                       <p className="text-[10px] text-slate-500 leading-relaxed font-light">{banom.desc}</p>
                       
                       <div className="space-y-1.5 pt-1">
-                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Pengurus Aktif:</span>
+                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Pengurus Terdaftar:</span>
+                        {banom.members.length === 0 && (
+                          <p className="text-[10px] text-slate-400 italic py-1">Belum ada pengurus terdaftar untuk badan otonom ini.</p>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {banom.members.map((m) => (
                             <div key={m.id} className="bg-white p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all shadow-xs">
@@ -1439,7 +1490,10 @@ export default function PortalPages({
                       <p className="text-[10px] text-slate-550 leading-relaxed font-light">{lem.desc}</p>
 
                       <div className="space-y-1.5 pt-1">
-                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Pengurus Aktif:</span>
+                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Pengurus Terdaftar:</span>
+                        {lem.members.length === 0 && (
+                          <p className="text-[10px] text-slate-400 italic py-1">Belum ada pengurus terdaftar untuk lembaga ini.</p>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {lem.members.map((m) => (
                             <div key={m.id} className="bg-white p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all shadow-xs">
@@ -1794,6 +1848,16 @@ export default function PortalPages({
       return kaderList.filter(k => k.rantingId === id).length;
     };
 
+    const getBanomCount = (rantingId: string) => {
+      const r = rantings.find(rn => rn.id === rantingId);
+      return r?.activeBanom?.length || 0;
+    };
+
+    const getLembagaCount = (rantingId: string) => {
+      const r = rantings.find(rn => rn.id === rantingId);
+      return r?.activeLembaga?.length || 0;
+    };
+
     return (
       <div className="space-y-6 animate-fadeIn">
         {/* Profile directory description & count banner */}
@@ -1920,8 +1984,8 @@ export default function PortalPages({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRantings.map((r) => {
             const kaderCount = getKaderCount(r.id);
-            const activeBanomCount = r.id === 'mwc' ? 13 : (r.activeBanom?.length || 0);
-            const activeLembagaCount = r.id === 'mwc' ? 17 : (r.activeLembaga?.length || 0);
+            const activeBanomCount = r.activeBanom?.length || 0;
+            const activeLembagaCount = r.activeLembaga?.length || 0;
             
             return (
               <div 
@@ -1977,10 +2041,39 @@ export default function PortalPages({
                   </div>
                 </div>
 
-                {/* Footer action */}
-                <div className="bg-gray-50/80 px-4.5 py-2.5 border-t border-gray-150 flex items-center justify-between text-xs font-semibold text-tosca-700 group-hover:bg-tosca-50/20 group-hover:text-tosca-800 transition-colors">
-                  <span>Buka Profil Lengkap →</span>
-                  <Building2 className="w-3.5 h-3.5 text-slate-350 group-hover:text-tosca-600 transition-colors" />
+                {/* Footer action + Admin controls */}
+                <div className="bg-gray-50/80 px-4 py-2.5 border-t border-gray-150 flex items-center justify-between">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedRantingProfileId(r.id);
+                    }}
+                    className="text-xs font-semibold text-tosca-700 hover:text-tosca-800 transition-colors flex items-center space-x-1"
+                  >
+                    <span>Buka Profil Lengkap</span>
+                    <Building2 className="w-3.5 h-3.5" />
+                  </button>
+                  {userRole && userRole !== 'guest' && (
+                    <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => {
+                          const newYear = window.prompt('Ubah Tahun Berdiri (format: YYYY-MM-DD):', r.established);
+                          if (newYear !== null && newYear.trim()) handleEditRantingField(r.id, 'established', newYear.trim());
+                        }}
+                        className="p-1.5 rounded-md hover:bg-white text-slate-400 hover:text-tosca-600 transition-colors"
+                        title="Edit Tahun Berdiri"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRanting(r.id, r.name)}
+                        className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                        title="Hapus Ranting"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );

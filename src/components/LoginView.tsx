@@ -39,7 +39,8 @@ export default function LoginView({
       return;
     }
 
-    // Try to login via Supabase Auth
+    // Try to login via Supabase Auth (await result so the client is properly authenticated for writes)
+    let supabaseAuthOk = false;
     if (isSupabaseConfigured && supabase) {
       try {
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -48,9 +49,9 @@ export default function LoginView({
         });
 
         if (signInError) {
-          // If user doesn't exist, try signing up automatically so they can log in seamlessly
+          // If user doesn't exist in Supabase Auth, try signing up automatically
           if (signInError.message?.toLowerCase().includes('invalid login credentials') || signInError.status === 400) {
-            const { error: signUpError } = await supabase.auth.signUp({
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
               email,
               password,
               options: {
@@ -62,14 +63,18 @@ export default function LoginView({
 
             if (signUpError) {
               console.warn("Supabase auto-signUp failed:", signUpError.message);
-              // Do not block login in-memory even if signup fails (e.g. email confirmation required but not confirmed)
             } else {
               console.log("Supabase auto-signUp successful for:", email);
+              // Session is established after signUp (if email confirmation is disabled)
+              if (signUpData.session) {
+                supabaseAuthOk = true;
+              }
             }
           } else {
             console.warn("Supabase signIn failed:", signInError.message);
           }
         } else {
+          supabaseAuthOk = true;
           console.log("Supabase signIn successful for:", email);
         }
       } catch (authErr: any) {
@@ -79,9 +84,16 @@ export default function LoginView({
 
     setUserRole(targetRole);
     setSelectedRantingId(targetRantingId);
-    setSuccess(true);
     setIsLoading(false);
     setError(null);
+    setSuccess(true);
+
+    // If Supabase Auth connection failed, warn user about local-only mode
+    if (isSupabaseConfigured && !supabaseAuthOk) {
+      // Still proceed — data will still save to Supabase if RLS allows anon writes,
+      // or fall back to localStorage gracefully.
+    }
+
     setTimeout(() => {
       setActiveTab('admin');
     }, 1500);

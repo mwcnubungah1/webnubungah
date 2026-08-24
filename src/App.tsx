@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Lock, 
   User, 
@@ -82,6 +82,9 @@ export default function App() {
   const [dokumentasiList, setDokumentasiList] = useState<Dokumentasi[]>([]);
   const [aspirasiList, setAspirasiList] = useState<Aspirasi[]>([]);
 
+  // Prevent data from being re-initialized on every userRole change (critical fix for data reverting)
+  const dataInitializedRef = useRef(false);
+
   // Listen to Supabase Auth state changes to keep userRole in sync
   useEffect(() => {
     if (isSupabaseConfigured && supabase) {
@@ -123,10 +126,14 @@ export default function App() {
     }
   }, []);
 
-  // Initialize DB from Supabase or LocalStorage/mockData
+  // Initialize DB from Supabase or LocalStorage/mockData — runs ONCE on mount only.
+  // Previously this depended on [userRole], which caused all data to be overwritten on every login.
   useEffect(() => {
+    if (dataInitializedRef.current) return;
+    dataInitializedRef.current = true;
+
     async function initData() {
-      if (isSupabaseConfigured) {
+      if (isSupabaseConfigured && supabase) {
         try {
           const [
             kader,
@@ -156,38 +163,29 @@ export default function App() {
             fetchTableData('pengurus').catch(() => [])
           ]);
 
-          const getStoredFallback = <T,>(key: string, defaultData: T[]): T[] => {
-            const stored = localStorage.getItem(`mwc_nu_${key}`);
-            if (stored) {
-              try {
-                return JSON.parse(stored);
-              } catch (e) {
-                console.error(`Error parsing fallback for ${key}`, e);
-              }
-            }
-            return defaultData;
-          };
-
-          setKaderList(kader.length > 0 ? kader : getStoredFallback('kader', mockKader));
-          setPengurusList(pengurus.length > 0 ? pengurus : getStoredFallback('pengurus', mockPengurus));
-          setKegiatanList(kegiatan.length > 0 ? kegiatan : getStoredFallback('kegiatan', mockKegiatan));
-          setKasList(kas.length > 0 ? kas : getStoredFallback('kas', mockTransparansiDana));
-          setKoinList(koin.length > 0 ? koin : getStoredFallback('koin_s3', mockKoinS3));
-          setSuratList(surat.length > 0 ? surat : getStoredFallback('persuratan', mockPersuratan));
-          setUsahaList(usaha.length > 0 ? usaha : getStoredFallback('usaha', mockUsaha));
-          setSaranaIbadahList(saranaIbadah.length > 0 ? saranaIbadah : getStoredFallback('sarana_ibadah', mockSaranaIbadah));
-          setSaranaPendidikanList(saranaPendidikan.length > 0 ? saranaPendidikan : getStoredFallback('sarana_pendidikan', mockSaranaPendidikan));
-          setBeritaList(berita.length > 0 ? berita : getStoredFallback('berita', mockBerita));
-          setDokumentasiList(dokumentasi.length > 0 ? dokumentasi : getStoredFallback('dokumentasi', mockDokumentasi));
-          setAspirasiList(aspirasi.length > 0 ? aspirasi : getStoredFallback('aspirasi', mockAspirasi));
-          setRantings(getStoredFallback('rantings', mockRantings));
+          // Trust Supabase data — even if a table is empty, that's valid.
+          // Do NOT fall back to localStorage/mocked data when Supabase is configured,
+          // as that causes local changes to reappear and overwrite Supabase state.
+          setKaderList(kader);
+          setPengurusList(pengurus);
+          setKegiatanList(kegiatan);
+          setKasList(kas);
+          setKoinList(koin);
+          setSuratList(surat);
+          setUsahaList(usaha);
+          setSaranaIbadahList(saranaIbadah);
+          setSaranaPendidikanList(saranaPendidikan);
+          setBeritaList(berita);
+          setDokumentasiList(dokumentasi);
+          setAspirasiList(aspirasi);
+          setRantings(getStoredRantings());
           return;
         } catch (error) {
           console.error("Failed to load from Supabase, falling back to local storage", error);
         }
       }
 
-      // Fallback: local storage
+      // Fallback: local storage (only when Supabase is NOT configured)
       const loadOrInit = <T,>(key: string, defaultData: T[]): T[] => {
         const stored = localStorage.getItem(`mwc_nu_${key}`);
         if (stored) {
@@ -216,8 +214,16 @@ export default function App() {
       setRantings(loadOrInit('rantings', mockRantings));
     }
 
+    function getStoredRantings(): Ranting[] {
+      const stored = localStorage.getItem('mwc_nu_rantings');
+      if (stored) {
+        try { return JSON.parse(stored); } catch (e) {}
+      }
+      return mockRantings;
+    }
+
     initData();
-  }, [userRole]);
+  }, []);
 
   // Sync state back to LocalStorage on changes (only when not using Supabase to save storage space/avoid race conditions, or as redundancy)
   useEffect(() => {

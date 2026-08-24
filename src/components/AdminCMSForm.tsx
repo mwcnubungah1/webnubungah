@@ -442,17 +442,15 @@ export default function AdminCMSForm({
                   </div>
                 )}
               </div>
-            )}
-
-            {formData.groupType === 'Lembaga' && (
+            )}            {formData.groupType === 'Lembaga' && (
               <div className="space-y-1">
                 <label className="font-semibold text-slate-600">Pilih Lembaga NU *</label>
                 <select 
                   value={
-                    ["LAZISNU", "LP Ma'arif NU", "LTMNU", "LDNU", "RMI NU", "LKNU", "LAKPESDAM NU", "LESBUMI", "LPBI NU", "LWPNU", "LPBHNU", "LPPNU", "LTN NU", "LKKNU"].includes(formData.groupName || '')
+                    ["LAZISNU", "LPMNU", "LTMNU", "LDNU", "RMI-NU", "LKNU", "LAKPESDAM", "LESBUMI", "LPBI-NU", "LWPNU", "LPBHNU", "LPPNU", "LTNNU", "LKKNU", "LPNU", "LP2NU", "LBMNU", "LF-NU"].includes(formData.groupName || '')
                       ? formData.groupName 
                       : 'Lainnya'
-                  } 
+                  }
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === 'Lainnya') {
@@ -464,23 +462,27 @@ export default function AdminCMSForm({
                   className="w-full bg-white border border-slate-200 rounded p-2"
                 >
                   <option value="LAZISNU">LAZISNU</option>
-                  <option value="LP Ma'arif NU">LP Ma'arif NU</option>
+                  <option value="LPMNU">LP Ma'arif NU (LPMNU)</option>
                   <option value="LTMNU">LTMNU</option>
                   <option value="LDNU">LDNU</option>
-                  <option value="RMI NU">RMI NU</option>
+                  <option value="RMI-NU">RMI-NU</option>
                   <option value="LKNU">LKNU</option>
-                  <option value="LAKPESDAM NU">LAKPESDAM NU</option>
+                  <option value="LAKPESDAM">LAKPESDAM</option>
                   <option value="LESBUMI">LESBUMI</option>
-                  <option value="LPBI NU">LPBI NU</option>
+                  <option value="LPBI-NU">LPBI-NU</option>
                   <option value="LWPNU">LWPNU</option>
                   <option value="LPBHNU">LPBHNU</option>
                   <option value="LPPNU">LPPNU</option>
-                  <option value="LTN NU">LTN NU</option>
+                  <option value="LTNNU">LTNNU</option>
                   <option value="LKKNU">LKKNU</option>
+                  <option value="LPNU">LPNU</option>
+                  <option value="LP2NU">LP2NU</option>
+                  <option value="LBMNU">LBMNU</option>
+                  <option value="LF-NU">LF-NU</option>
                   <option value="Lainnya">Lainnya (Kustom / Tulis Sendiri)</option>
                 </select>
 
-                {!["LAZISNU", "LP Ma'arif NU", "LTMNU", "LDNU", "RMI NU", "LKNU", "LAKPESDAM NU", "LESBUMI", "LPBI NU", "LWPNU", "LPBHNU", "LPPNU", "LTN NU", "LKKNU"].includes(formData.groupName || '') && (
+                {!["LAZISNU", "LPMNU", "LTMNU", "LDNU", "RMI-NU", "LKNU", "LAKPESDAM", "LESBUMI", "LPBI-NU", "LWPNU", "LPBHNU", "LPPNU", "LTNNU", "LKKNU", "LPNU", "LP2NU", "LBMNU", "LF-NU"].includes(formData.groupName || '') && (
                   <div className="mt-2 animate-fadeIn">
                     <label className="text-[10px] text-slate-500 font-semibold">Tulis Nama Lembaga Kustom *</label>
                     <input 
