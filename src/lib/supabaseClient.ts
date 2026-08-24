@@ -61,6 +61,7 @@ export function camelToSnake(obj: any): any {
 
 export function getTableName(model: string): string {
   if (model === 'keuangan') return 'kas_dana';
+  if (model === 'ranting') return 'ranting';
   return model;
 }
 

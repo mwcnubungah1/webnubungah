@@ -88,10 +88,10 @@ export default function LoginView({
     setError(null);
     setSuccess(true);
 
-    // If Supabase Auth connection failed, warn user about local-only mode
+    // If Supabase Auth connection failed, user can still operate
+    // Data writes will be attempted via Supabase (with RLS policies handling access).
     if (isSupabaseConfigured && !supabaseAuthOk) {
-      // Still proceed — data will still save to Supabase if RLS allows anon writes,
-      // or fall back to localStorage gracefully.
+      // Proceed — RLS policies control write access at the database level.
     }
 
     setTimeout(() => {

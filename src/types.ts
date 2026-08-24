@@ -43,6 +43,7 @@ export interface Pengurus {
   photoUrl?: string;
   groupType?: 'Harian' | 'Banom' | 'Lembaga';
   groupName?: string; // name of Banom (e.g. "GP Ansor", "Fatayat NU") or Lembaga (e.g. "LAZISNU")
+  kaderId?: string; // link to kader table if pengurus is also a kader (PD-PKPNU)
 }
 
 export interface Kader {

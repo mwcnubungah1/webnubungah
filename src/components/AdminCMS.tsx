@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Plus, 
   Download, 
@@ -10,7 +10,13 @@ import {
   Info,
   CheckCircle2,
   Lock,
-  Upload
+  Upload,
+  BarChart3,
+  Users,
+  CheckCircle,
+  XCircle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { parseCSVLine, parseBirth, mapUnsurToBanom, mapRantingToId, mapAngkatanToYear } from '../data/mockData';
 import { 
@@ -69,6 +75,7 @@ interface AdminCMSProps {
   setPengurusList: React.Dispatch<React.SetStateAction<Pengurus[]>>;
   activeModel: ModelType;
   setActiveModel: (model: ModelType) => void;
+  refetchData?: () => Promise<void>;
 }
 
 export default function AdminCMS({
@@ -99,7 +106,8 @@ export default function AdminCMS({
   pengurusList,
   setPengurusList,
   activeModel,
-  setActiveModel
+  setActiveModel,
+  refetchData
 }: AdminCMSProps) {
 
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
@@ -109,6 +117,9 @@ export default function AdminCMS({
   // Form toggles
   const [showAddForm, setShowAddForm] = useState(false);
   const [editItemId, setEditItemId] = useState<string | null>(null);
+
+  // Stats toggle
+  const [showStats, setShowStats] = useState(false);
 
   // Helper: Get Ranting Name
   const getRantingName = (id?: string) => {
@@ -328,7 +339,8 @@ export default function AdminCMS({
 
         const updatedList = [...savedKaders, ...kaderList];
         setKaderList(updatedList);
-        localStorage.setItem('mwc_nu_kader', JSON.stringify(updatedList));
+        // Re-fetch from Supabase to ensure consistency
+        if (refetchData) refetchData();
 
         setSuccessMessage(`Berhasil mengimpor ${successCount} data kader! ${failCount > 0 ? `(${failCount} baris gagal)` : ''}`);
         setTimeout(() => setSuccessMessage(null), 8000);
@@ -415,6 +427,8 @@ export default function AdminCMS({
       } else {
         setSuccessMessage('Data berhasil dihapus secara lokal dari perangkat ini (Supabase RLS aktif).');
       }
+      // Re-fetch from Supabase to ensure consistency
+      if (refetchData) refetchData();
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
       console.error(err);
@@ -445,6 +459,8 @@ export default function AdminCMS({
         }
         setAspirasiList(aspirasiList.map(item => item.id === id ? updated : item));
         setSuccessMessage(`Status Aspirasi #${id.slice(0, 4)} diubah menjadi [${newStatus}]`);
+        // Re-fetch from Supabase to ensure consistency
+        if (refetchData) refetchData();
         setTimeout(() => setSuccessMessage(null), 4000);
       }
     } catch (err: any) {
@@ -478,6 +494,9 @@ export default function AdminCMS({
       return;
     }
 
+    // Strip kaderId before sending to Supabase (column may not exist yet)
+    const { kaderId: _kid, ...dataForDb } = data;
+
     try {
       if (editItemId) {
         // EDIT MODE
@@ -487,11 +506,11 @@ export default function AdminCMS({
           try {
             // First try UPDATE — if the row doesn't exist in Supabase, fall back to INSERT
             try {
-              updatedItem = await updateTableData(activeModel, editItemId, data);
+              updatedItem = await updateTableData(activeModel, editItemId, dataForDb);
             } catch (updateErr: any) {
               // If update failed (row not found), insert as new record
               console.warn("Supabase update failed (row may not exist), inserting new:", updateErr?.message);
-              updatedItem = await insertTableData(activeModel, data);
+              updatedItem = await insertTableData(activeModel, dataForDb);
             }
           } catch (dbErr: any) {
             console.warn("Supabase write failed, falling back to local storage:", dbErr);
@@ -520,10 +539,12 @@ export default function AdminCMS({
         } else {
           setSuccessMessage(`Berhasil memperbarui data ${activeModel.toUpperCase()} secara lokal (Supabase RLS aktif).`);
         }
+        // Re-fetch from Supabase to ensure consistency
+        if (refetchData) refetchData();
       } else {
         // ADD MODE
         const localId = `${activeModel.slice(0, 2)}-${Date.now()}`;
-        const itemToSave = { ...data, id: localId };
+        const itemToSave = { ...dataForDb, id: localId };
 
         let savedItem = itemToSave;
         let savedToCloud = true;
@@ -557,6 +578,8 @@ export default function AdminCMS({
         } else {
           setSuccessMessage(`Berhasil menyimpan data ${activeModel.toUpperCase()} baru secara lokal (Supabase RLS aktif).`);
         }
+        // Re-fetch from Supabase to ensure consistency
+        if (refetchData) refetchData();
       }
 
       setShowAddForm(false);
@@ -594,11 +617,202 @@ export default function AdminCMS({
         </div>
       </div>
 
+      {/* ═══════ STATISTIK KADERISASI ═══════ */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-xs overflow-hidden">
+        <button
+          onClick={() => setShowStats(!showStats)}
+          className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+              <BarChart3 className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-bold text-gray-900 text-sm">📊 Statistik Kaderisasi & Kepengurusan</h3>
+              <p className="text-[10px] text-slate-400 font-semibold">Ringkasan jumlah pengurus vs kader PD-PKPNU per tingkat</p>
+            </div>
+          </div>
+          {showStats ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+
+        {showStats && (
+          <div className="p-4 border-t border-slate-100 space-y-6">
+            {/* Ringkasan Global */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="bg-indigo-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-indigo-700">{pengurusList.length}</p>
+                <span className="text-[10px] font-bold text-indigo-500 uppercase">Total Pengurus</span>
+              </div>
+              <div className="bg-emerald-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-emerald-700">{pengurusList.filter(p => p.kaderisasiStatus === 'PD-PKPNU' || p.kaderisasiStatus === 'MKNU' || p.kaderisasiStatus === 'Penyetaraan').length}</p>
+                <span className="text-[10px] font-bold text-emerald-500 uppercase">Sudah Kaderisasi</span>
+              </div>
+              <div className="bg-red-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-red-700">{pengurusList.filter(p => !p.kaderisasiStatus || p.kaderisasiStatus === 'Belum' || p.kaderisasiStatus === 'BELUM').length}</p>
+                <span className="text-[10px] font-bold text-red-500 uppercase">Belum Kaderisasi</span>
+              </div>
+              <div className="bg-amber-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-amber-700">{kaderList.length}</p>
+                <span className="text-[10px] font-bold text-amber-500 uppercase">Data Kader</span>
+              </div>
+              <div className="bg-purple-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-purple-700">{(() => {
+                  // Count unique kader who hold multiple pengurus positions
+                  const kaderWithPositions = new Map<string, number>();
+                  pengurusList.filter(p => p.kaderId).forEach(p => {
+                    kaderWithPositions.set(p.kaderId!, (kaderWithPositions.get(p.kaderId!) || 0) + 1);
+                  });
+                  return Array.from(kaderWithPositions.values()).filter(v => v > 1).length;
+                })()}</p>
+                <span className="text-[10px] font-bold text-purple-500 uppercase">Multi-Role (Jabatan Ganda)</span>
+              </div>
+            </div>
+
+            {/* Detail per Ranting */}
+            <div>
+              <h4 className="font-bold text-gray-900 text-xs mb-3 uppercase tracking-wide">Detail per Ranting & MWC</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-500 font-bold">
+                      <th className="text-left py-2.5">Ranting</th>
+                      <th className="text-center py-2.5">Pengurus</th>
+                      <th className="text-center py-2.5">Sudah Kaderisasi</th>
+                      <th className="text-center py-2.5">Belum Kaderisasi</th>
+                      <th className="text-center py-2.5">Persentase</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rantings.map(r => {
+                      const rp = pengurusList.filter(p => {
+                        if (r.id === 'mwc') return p.category === 'MWC';
+                        return p.category === 'Ranting' && p.rantingId === r.id;
+                      });
+                      const sudahKaderisasi = rp.filter(p => p.kaderisasiStatus === 'PD-PKPNU' || p.kaderisasiStatus === 'MKNU' || p.kaderisasiStatus === 'Penyetaraan').length;
+                      const belumKaderisasi = rp.filter(p => !p.kaderisasiStatus || p.kaderisasiStatus === 'Belum' || p.kaderisasiStatus === 'BELUM').length;
+                      const persen = rp.length > 0 ? ((sudahKaderisasi / rp.length) * 100).toFixed(0) : '0';
+                      return (
+                        <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                          <td className="py-2 font-bold text-gray-800">{r.name}</td>
+                          <td className="py-2 text-center font-mono text-slate-700">{rp.length}</td>
+                          <td className="py-2 text-center">
+                            <span className="inline-flex items-center space-x-1 text-emerald-700 font-bold">
+                              <CheckCircle className="w-3 h-3" /><span>{sudahKaderisasi}</span>
+                            </span>
+                          </td>
+                          <td className="py-2 text-center">
+                            <span className="inline-flex items-center space-x-1 text-red-700 font-bold">
+                              <XCircle className="w-3 h-3" /><span>{belumKaderisasi}</span>
+                            </span>
+                          </td>
+                          <td className="py-2 text-center">
+                            <div className="flex items-center justify-center space-x-2">
+                              <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div className="h-1.5 rounded-full" style={{ width: `${persen}%`, backgroundColor: Number(persen) >= 80 ? '#059669' : Number(persen) >= 50 ? '#d97706' : '#dc2626' }} />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-600 w-8">{persen}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Detail per Banom & Lembaga */}
+            <div>
+              <h4 className="font-bold text-gray-900 text-xs mb-3 uppercase tracking-wide">Detail per Banom & Lembaga (MWC Level)</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Banom */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Badan Otonom (Banom)</span>
+                  {(() => {
+                    const banomTypes = ['Muslimat NU', 'GP Ansor', 'Fatayat NU', 'IPNU', 'IPPNU', 'PMII', 'ISNU', 'JARTMAN', 'JQH', 'Pergunu', 'Sarbumusi', 'Pagar Nusa', 'Lesbumi'];
+                    return banomTypes.map(bName => {
+                      const bp = pengurusList.filter(p => p.groupType === 'Banom' && p.groupName === bName);
+                      const sudah = bp.filter(p => p.kaderisasiStatus === 'PD-PKPNU' || p.kaderisasiStatus === 'MKNU' || p.kaderisasiStatus === 'Penyetaraan').length;
+                      if (bp.length === 0) return null;
+                      return (
+                        <div key={bName} className="flex items-center justify-between p-2 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                          <span className="text-[11px] font-bold text-gray-800">{bName}</span>
+                          <div className="flex items-center space-x-3 text-[10px]">
+                            <span className="text-slate-500">{bp.length} pengurus</span>
+                            <span className="text-emerald-700 font-bold">✓ {sudah}</span>
+                            <span className="text-red-700 font-bold">✗ {bp.length - sudah}</span>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Lembaga */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Lembaga</span>
+                  {(() => {
+                    const lembagaTypes = ['LDNU', 'LPMNU', 'RMI-NU', 'LKKNU', 'LTMNU', 'LAZISNU', 'LKNU', 'LAKPESDAM', 'LPBHNU', 'LPNU', 'LP2NU', 'LBMNU', 'LESBUMI', 'LTNNU', 'LPBI-NU', 'LF-NU', 'LWPNU'];
+                    return lembagaTypes.map(lName => {
+                      const lp = pengurusList.filter(p => p.groupType === 'Lembaga' && p.groupName === lName);
+                      const sudah = lp.filter(p => p.kaderisasiStatus === 'PD-PKPNU' || p.kaderisasiStatus === 'MKNU' || p.kaderisasiStatus === 'Penyetaraan').length;
+                      if (lp.length === 0) return null;
+                      return (
+                        <div key={lName} className="flex items-center justify-between p-2 bg-blue-50/50 rounded-lg border border-blue-100">
+                          <span className="text-[11px] font-bold text-gray-800">{lName}</span>
+                          <div className="flex items-center space-x-3 text-[10px]">
+                            <span className="text-slate-500">{lp.length} pengurus</span>
+                            <span className="text-emerald-700 font-bold">✓ {sudah}</span>
+                            <span className="text-red-700 font-bold">✗ {lp.length - sudah}</span>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Multi-Role Detail */}
+              {(() => {
+                const kaderPositions = new Map<string, { name: string; roles: string[] }>();
+                pengurusList.filter(p => p.kaderId).forEach(p => {
+                  const existing = kaderPositions.get(p.kaderId!);
+                  if (existing) {
+                    existing.roles.push(`${p.role} (${p.groupName || p.groupType})`);
+                  } else {
+                    kaderPositions.set(p.kaderId!, { name: p.name, roles: [`${p.role} (${p.groupName || p.groupType})`] });
+                  }
+                });
+                const multiRole = Array.from(kaderPositions.entries()).filter(([, v]) => v.roles.length > 1);
+                if (multiRole.length === 0) return null;
+                return (
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <h4 className="font-bold text-gray-900 text-xs mb-2 uppercase tracking-wide">🔀 Kader dengan Multi-Role (Jabatan Ganda)</h4>
+                    <div className="space-y-1.5">
+                      {multiRole.map(([kid, info]) => (
+                        <div key={kid} className="flex items-center justify-between p-2 bg-purple-50/50 rounded-lg border border-purple-100">
+                          <span className="text-[11px] font-bold text-gray-800">{info.name}</span>
+                          <div className="flex flex-wrap gap-1">
+                            {info.roles.map((r, i) => (
+                              <span key={i} className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[9px] font-bold rounded">{r}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Model Selection Tabs */}
       <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xs flex flex-wrap gap-2 animate-slideDown">
         {([
-          { id: 'kader', label: 'Data Kader' },
-          { id: 'pengurus', label: 'Profil Jamiyah' },
+          { id: 'kader', label: 'Data Kader (PD-PKPNU)' },
+          { id: 'pengurus', label: 'Pengurus Jamiyah' },
           { id: 'kegiatan', label: 'Kegiatan NU' },
           { id: 'koin_s3', label: 'LAZISNU Koin S3' },
           { id: 'keuangan', label: 'Arus Kas MWC' },

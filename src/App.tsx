@@ -44,7 +44,9 @@ import {
   mockSaranaPendidikan, 
   mockBerita, 
   mockDokumentasi, 
-  mockAspirasi 
+  mockAspirasi,
+  rantingNameToSlug,
+  slugToRantingId
 } from './data/mockData';
 
 import { isSupabaseConfigured, fetchTableData, insertTableData, supabase } from './lib/supabaseClient';
@@ -62,12 +64,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [activeModel, setActiveModel] = useState<ModelType>('kader');
+  // Sub-path for nested routes like /profil/mwc/banom/gp-ansor
+  const [profileSubPath, setProfileSubPath] = useState<string>('');
 
   // Authentication states
   const [userRole, setUserRole] = useState<Role>('guest');
   const [selectedRantingId, setSelectedRantingId] = useState<string>('mwc');
 
-  // Database collections with LocalStorage/Supabase persistence
+  // Database collections — all sourced from Supabase
   const [rantings, setRantings] = useState<Ranting[]>([]);
   const [kaderList, setKaderList] = useState<Kader[]>([]);
   const [pengurusList, setPengurusList] = useState<Pengurus[]>([]);
@@ -82,7 +86,10 @@ export default function App() {
   const [dokumentasiList, setDokumentasiList] = useState<Dokumentasi[]>([]);
   const [aspirasiList, setAspirasiList] = useState<Aspirasi[]>([]);
 
-  // Prevent data from being re-initialized on every userRole change (critical fix for data reverting)
+  // Loading state: true while initial data is being fetched from Supabase
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Track whether initial fetch has completed to avoid double-fetch
   const dataInitializedRef = useRef(false);
 
   // Listen to Supabase Auth state changes to keep userRole in sync
@@ -126,145 +133,100 @@ export default function App() {
     }
   }, []);
 
-  // Initialize DB from Supabase or LocalStorage/mockData — runs ONCE on mount only.
-  // Previously this depended on [userRole], which caused all data to be overwritten on every login.
+  // Fetch ALL data from Supabase — runs ONCE on mount.
+  // No localStorage fallback; Supabase is the single source of truth.
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const [
+          kader,
+          kegiatan,
+          kas,
+          koin,
+          surat,
+          usaha,
+          saranaIbadah,
+          saranaPendidikan,
+          berita,
+          dokumentasi,
+          aspirasi,
+          pengurus,
+          rantingData
+        ] = await Promise.all([
+          fetchTableData('kader').catch(() => []),
+          fetchTableData('kegiatan').catch(() => []),
+          fetchTableData('keuangan').catch(() => []),
+          fetchTableData('koin_s3').catch(() => []),
+          fetchTableData('persuratan').catch(() => []),
+          fetchTableData('usaha').catch(() => []),
+          fetchTableData('sarana_ibadah').catch(() => []),
+          fetchTableData('sarana_pendidikan').catch(() => []),
+          fetchTableData('berita').catch(() => []),
+          fetchTableData('dokumentasi').catch(() => []),
+          fetchTableData('aspirasi').catch(() => []),
+          fetchTableData('pengurus').catch(() => []),
+          fetchTableData('ranting').catch(() => [])
+        ]);
+
+        setKaderList(kader);
+        setPengurusList(pengurus);
+        setKegiatanList(kegiatan);
+        setKasList(kas);
+        setKoinList(koin);
+        setSuratList(surat);
+        setUsahaList(usaha);
+        setSaranaIbadahList(saranaIbadah);
+        setSaranaPendidikanList(saranaPendidikan);
+        setBeritaList(berita);
+        setDokumentasiList(dokumentasi);
+        setAspirasiList(aspirasi);
+        // If ranting table has data, use it; otherwise fallback to mock data
+        setRantings(rantingData.length > 0 ? rantingData : mockRantings);
+      } else {
+        // Supabase not configured — use mock data as static fallback (read-only mode)
+        setKaderList(mockKader);
+        setPengurusList(mockPengurus);
+        setKegiatanList(mockKegiatan);
+        setKasList(mockTransparansiDana);
+        setKoinList(mockKoinS3);
+        setSuratList(mockPersuratan);
+        setUsahaList(mockUsaha);
+        setSaranaIbadahList(mockSaranaIbadah);
+        setSaranaPendidikanList(mockSaranaPendidikan);
+        setBeritaList(mockBerita);
+        setDokumentasiList(mockDokumentasi);
+        setAspirasiList(mockAspirasi);
+        setRantings(mockRantings);
+      }
+    } catch (error) {
+      console.error("Failed to fetch data from Supabase:", error);
+      // On error, use mock data as last resort so the app still renders
+      setKaderList(mockKader);
+      setPengurusList(mockPengurus);
+      setKegiatanList(mockKegiatan);
+      setKasList(mockTransparansiDana);
+      setKoinList(mockKoinS3);
+      setSuratList(mockPersuratan);
+      setUsahaList(mockUsaha);
+      setSaranaIbadahList(mockSaranaIbadah);
+      setSaranaPendidikanList(mockSaranaPendidikan);
+      setBeritaList(mockBerita);
+      setDokumentasiList(mockDokumentasi);
+      setAspirasiList(mockAspirasi);
+      setRantings(mockRantings);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (dataInitializedRef.current) return;
     dataInitializedRef.current = true;
-
-    async function initData() {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const [
-            kader,
-            kegiatan,
-            kas,
-            koin,
-            surat,
-            usaha,
-            saranaIbadah,
-            saranaPendidikan,
-            berita,
-            dokumentasi,
-            aspirasi,
-            pengurus
-          ] = await Promise.all([
-            fetchTableData('kader').catch(() => []),
-            fetchTableData('kegiatan').catch(() => []),
-            fetchTableData('keuangan').catch(() => []),
-            fetchTableData('koin_s3').catch(() => []),
-            fetchTableData('persuratan').catch(() => []),
-            fetchTableData('usaha').catch(() => []),
-            fetchTableData('sarana_ibadah').catch(() => []),
-            fetchTableData('sarana_pendidikan').catch(() => []),
-            fetchTableData('berita').catch(() => []),
-            fetchTableData('dokumentasi').catch(() => []),
-            fetchTableData('aspirasi').catch(() => []),
-            fetchTableData('pengurus').catch(() => [])
-          ]);
-
-          // Trust Supabase data — even if a table is empty, that's valid.
-          // Do NOT fall back to localStorage/mocked data when Supabase is configured,
-          // as that causes local changes to reappear and overwrite Supabase state.
-          setKaderList(kader);
-          setPengurusList(pengurus);
-          setKegiatanList(kegiatan);
-          setKasList(kas);
-          setKoinList(koin);
-          setSuratList(surat);
-          setUsahaList(usaha);
-          setSaranaIbadahList(saranaIbadah);
-          setSaranaPendidikanList(saranaPendidikan);
-          setBeritaList(berita);
-          setDokumentasiList(dokumentasi);
-          setAspirasiList(aspirasi);
-          setRantings(getStoredRantings());
-          return;
-        } catch (error) {
-          console.error("Failed to load from Supabase, falling back to local storage", error);
-        }
-      }
-
-      // Fallback: local storage (only when Supabase is NOT configured)
-      const loadOrInit = <T,>(key: string, defaultData: T[]): T[] => {
-        const stored = localStorage.getItem(`mwc_nu_${key}`);
-        if (stored) {
-          try {
-            return JSON.parse(stored);
-          } catch (e) {
-            console.error(`Error parsing ${key}`, e);
-          }
-        }
-        localStorage.setItem(`mwc_nu_${key}`, JSON.stringify(defaultData));
-        return defaultData;
-      };
-
-      setKaderList(loadOrInit('kader', mockKader));
-      setPengurusList(loadOrInit('pengurus', mockPengurus));
-      setKegiatanList(loadOrInit('kegiatan', mockKegiatan));
-      setKasList(loadOrInit('kas', mockTransparansiDana));
-      setKoinList(loadOrInit('koin_s3', mockKoinS3));
-      setSuratList(loadOrInit('persuratan', mockPersuratan));
-      setUsahaList(loadOrInit('usaha', mockUsaha));
-      setSaranaIbadahList(loadOrInit('sarana_ibadah', mockSaranaIbadah));
-      setSaranaPendidikanList(loadOrInit('sarana_pendidikan', mockSaranaPendidikan));
-      setBeritaList(loadOrInit('berita', mockBerita));
-      setDokumentasiList(loadOrInit('dokumentasi', mockDokumentasi));
-      setAspirasiList(loadOrInit('aspirasi', mockAspirasi));
-      setRantings(loadOrInit('rantings', mockRantings));
-    }
-
-    function getStoredRantings(): Ranting[] {
-      const stored = localStorage.getItem('mwc_nu_rantings');
-      if (stored) {
-        try { return JSON.parse(stored); } catch (e) {}
-      }
-      return mockRantings;
-    }
-
-    initData();
+    fetchAllData();
   }, []);
 
-  // Sync state back to LocalStorage on changes (only when not using Supabase to save storage space/avoid race conditions, or as redundancy)
-  useEffect(() => {
-    if (kaderList.length > 0) localStorage.setItem('mwc_nu_kader', JSON.stringify(kaderList));
-  }, [kaderList]);
-  useEffect(() => {
-    if (pengurusList.length > 0) localStorage.setItem('mwc_nu_pengurus', JSON.stringify(pengurusList));
-  }, [pengurusList]);
-  useEffect(() => {
-    if (kegiatanList.length > 0) localStorage.setItem('mwc_nu_kegiatan', JSON.stringify(kegiatanList));
-  }, [kegiatanList]);
-  useEffect(() => {
-    if (kasList.length > 0) localStorage.setItem('mwc_nu_kas', JSON.stringify(kasList));
-  }, [kasList]);
-  useEffect(() => {
-    if (koinList.length > 0) localStorage.setItem('mwc_nu_koin_s3', JSON.stringify(koinList));
-  }, [koinList]);
-  useEffect(() => {
-    if (suratList.length > 0) localStorage.setItem('mwc_nu_persuratan', JSON.stringify(suratList));
-  }, [suratList]);
-  useEffect(() => {
-    if (usahaList.length > 0) localStorage.setItem('mwc_nu_usaha', JSON.stringify(usahaList));
-  }, [usahaList]);
-  useEffect(() => {
-    if (saranaIbadahList.length > 0) localStorage.setItem('mwc_nu_sarana_ibadah', JSON.stringify(saranaIbadahList));
-  }, [saranaIbadahList]);
-  useEffect(() => {
-    if (saranaPendidikanList.length > 0) localStorage.setItem('mwc_nu_sarana_pendidikan', JSON.stringify(saranaPendidikanList));
-  }, [saranaPendidikanList]);
-  useEffect(() => {
-    if (beritaList.length > 0) localStorage.setItem('mwc_nu_berita', JSON.stringify(beritaList));
-  }, [beritaList]);
-  useEffect(() => {
-    if (dokumentasiList.length > 0) localStorage.setItem('mwc_nu_dokumentasi', JSON.stringify(dokumentasiList));
-  }, [dokumentasiList]);
-  useEffect(() => {
-    if (aspirasiList.length > 0) localStorage.setItem('mwc_nu_aspirasi', JSON.stringify(aspirasiList));
-  }, [aspirasiList]);
-  useEffect(() => {
-    if (rantings.length > 0) localStorage.setItem('mwc_nu_rantings', JSON.stringify(rantings));
-  }, [rantings]);
+
 
   // Handler: Add Public Aspiration
   const handleAddAspirasi = async (newAspirasi: Omit<Aspirasi, 'id' | 'date' | 'status'>) => {
@@ -286,7 +248,6 @@ export default function App() {
 
     const updated = [savedAspirasi, ...aspirasiList];
     setAspirasiList(updated);
-    localStorage.setItem('mwc_nu_aspirasi', JSON.stringify(updated));
   };
 
   // Handler: Simulate Logout
@@ -307,15 +268,35 @@ export default function App() {
   // Path-based client-side routing synchronization
   useEffect(() => {
     const handlePathChange = () => {
-      const path = window.location.pathname.replace(/^\//, '');
-      if (path) {
-        if (path === 'admin' && userRole === 'guest') {
+      const fullPath = window.location.pathname.replace(/^\//, '');
+      if (fullPath) {
+        if (fullPath === 'admin' && userRole === 'guest') {
           setActiveTab('login');
+          setProfileSubPath('');
         } else {
-          setActiveTab(path);
+          // Check for nested routes: e.g. 'profil/mwc/banom/gp-ansor' or 'profil/ranting-bungah/banom/gp-ansor'
+          const firstSegment = fullPath.split('/')[0];
+          const remaining = fullPath.split('/').slice(1).join('/');
+          if (firstSegment === 'profil') {
+            setActiveTab('profil');
+            // Convert ranting slug back to ID: 'ranting-bungah/banom/gp-ansor' → 'r17/banom/gp-ansor'
+            if (remaining) {
+              const rParts = remaining.split('/');
+              const slugOrId = rParts[0] || '';
+              const rantingId = slugToRantingId(slugOrId, rantings);
+              const rest = rParts.slice(1).join('/');
+              setProfileSubPath(rest ? `${rantingId}/${rest}` : rantingId);
+            } else {
+              setProfileSubPath('');
+            }
+          } else {
+            setActiveTab(fullPath);
+            setProfileSubPath('');
+          }
         }
       } else {
         setActiveTab('home');
+        setProfileSubPath('');
       }
     };
 
@@ -330,13 +311,29 @@ export default function App() {
   }, [userRole]);
 
   // Sync activeTab state changes to the URL path
+  // profileSubPath may contain ranting IDs (e.g. 'mwc/banom/gp-ansor')
+  // We convert the ranting ID to a name slug for the URL.
   useEffect(() => {
-    const currentPath = window.location.pathname.replace(/^\//, '') || 'home';
-    if (currentPath !== activeTab) {
-      const targetPath = activeTab === 'home' ? '/' : `/${activeTab}`;
+    const currentFull = window.location.pathname.replace(/^\//, '');
+    let targetPath: string;
+    if (activeTab === 'home') {
+      targetPath = '/';
+    } else if (activeTab === 'profil' && profileSubPath) {
+      // Convert ranting ID in subPath to slug: 'mwc/banom/gp-ansor' → 'mwc/banom/gp-ansor'
+      // 'r17/banom/gp-ansor' → 'ranting-bungah/banom/gp-ansor'
+      const parts = profileSubPath.split('/');
+      const rantingId = parts[0] || '';
+      const ranting = rantings.find(r => r.id === rantingId);
+      const slug = ranting ? rantingNameToSlug(ranting.name) : rantingId;
+      const rest = parts.slice(1).join('/');
+      targetPath = rest ? `/profil/${slug}/${rest}` : `/profil/${slug}/`;
+    } else {
+      targetPath = `/${activeTab}`;
+    }
+    if (currentFull !== targetPath.replace(/^\//, '')) {
       window.history.pushState(null, '', targetPath);
     }
-  }, [activeTab]);
+  }, [activeTab, profileSubPath, rantings]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -365,6 +362,19 @@ export default function App() {
 
         {/* Dynamic Page router */}
         <main id="main-content-view" className="flex-grow p-4 md:p-8 max-w-7xl w-full mx-auto pb-16">
+          {/* Loading overlay while data is being fetched from Supabase */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20 animate-fadeIn">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="w-10 h-10 border-4 border-tosca-200 border-t-tosca-600 rounded-full animate-spin" />
+                <div className="text-center">
+                  <p className="text-sm font-bold text-slate-700">Memuat data dari database...</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Mengambil data terbaru dari Supabase</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'login' && (
             <LoginView 
               setUserRole={setUserRole} 
@@ -373,7 +383,7 @@ export default function App() {
             />
           )}
           
-          {activeTab === 'admin' && (
+          {activeTab === 'admin' && !isLoading && (
             userRole !== 'guest' ? (
               <AdminCMS 
                 userRole={userRole}
@@ -404,6 +414,7 @@ export default function App() {
                 setPengurusList={setPengurusList}
                 activeModel={activeModel}
                 setActiveModel={setActiveModel}
+                refetchData={fetchAllData}
               />
             ) : (
               <LoginView 
@@ -417,7 +428,7 @@ export default function App() {
           {activeTab === 'specs' && <TechnicalSpecs />}
 
           {/* Render regular public pages */}
-          {activeTab !== 'login' && activeTab !== 'admin' && activeTab !== 'specs' && (
+          {activeTab !== 'login' && activeTab !== 'admin' && activeTab !== 'specs' && !isLoading && (
             <PortalPages 
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -428,6 +439,7 @@ export default function App() {
               kaderList={kaderList}
               setKaderList={setKaderList}
               kegiatanList={kegiatanList}
+              setKegiatanList={setKegiatanList}
               kasList={kasList}
               koinList={koinList}
               suratList={suratList}
@@ -442,6 +454,10 @@ export default function App() {
               setDokumentasiList={setDokumentasiList}
               aspirasiList={aspirasiList}
               addAspirasi={handleAddAspirasi}
+              refetchData={fetchAllData}
+              profileSubPath={profileSubPath}
+              setProfileSubPath={setProfileSubPath}
+              setPengurusList={setPengurusList}
             />
           )}
         </main>

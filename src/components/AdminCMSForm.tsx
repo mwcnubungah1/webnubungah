@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Loader2, AlertCircle, Plus } from 'lucide-react';
+import { X, Upload, Loader2, AlertCircle, Plus, CheckCircle2 } from 'lucide-react';
 import { 
   Role, Ranting, ModelType,
   Kader, Kegiatan, TransparansiDana, KoinS3, Persuratan, Usaha, 
@@ -29,6 +29,14 @@ interface AdminCMSFormProps {
   dokumentasiList: Dokumentasi[];
   aspirasiList: Aspirasi[];
   pengurusList: Pengurus[];
+  /** Pre-fill context when adding pengurus from a Banom/Lembaga detail page */
+  formContext?: {
+    category?: 'MWC' | 'Ranting';
+    rantingId?: string;
+    groupType?: 'Harian' | 'Banom' | 'Lembaga';
+    groupName?: string;
+    organizer?: string;
+  };
 }
 
 export default function AdminCMSForm({
@@ -49,13 +57,15 @@ export default function AdminCMSForm({
   beritaList,
   dokumentasiList,
   aspirasiList,
-  pengurusList
+  pengurusList,
+  formContext
 }: AdminCMSFormProps) {
   const [formData, setFormData] = useState<any>({});
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [points, setPoints] = useState<{ text: string; amount: number; photoUrl: string }[]>([]);
+  const [kaderSearchLocal, setKaderSearchLocal] = useState('');
 
   // Initialize/Prefill Form State
   useEffect(() => {
@@ -100,7 +110,8 @@ export default function AdminCMSForm({
           unsur: 'GP Ansor', address: '', angkatan: 'XXXV'
         },
         kegiatan: {
-          title: '', date: nowStr, location: '', organizer: 'MWC NU Bungah',
+          title: '', date: nowStr, location: '',
+          organizer: formContext?.organizer || 'MWC NU Bungah',
           targetGroup: 'Masyarakat Umum', fundingSource: 'Kas Jamiyah',
           budget: 2000000, status: 'Rencana', description: '', imageUrl: ''
         },
@@ -140,9 +151,13 @@ export default function AdminCMSForm({
           title: '', type: 'Foto', url: '', date: nowStr, category: 'Kegiatan'
         },
         pengurus: {
-          name: '', role: 'Tanfidziyah', category: 'MWC', rantingId: 'r1',
-          phone: '', email: '', kaderisasiStatus: 'PD-PKPNU', education: 'S1', photoUrl: '',
-          groupType: 'Harian', groupName: ''
+          name: '', role: 'Tanfidziyah',
+          category: formContext?.category || 'MWC',
+          rantingId: formContext?.rantingId || 'r1',
+          phone: '', email: '', kaderisasiStatus: 'Belum', education: 'S1', photoUrl: '',
+          groupType: formContext?.groupType || 'Harian',
+          groupName: formContext?.groupName || '',
+          kaderId: ''
         }
       };
       setFormData(defaultData[activeModel] || {});
@@ -349,44 +364,65 @@ export default function AdminCMSForm({
 
         {activeModel === 'pengurus' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1 col-span-1 sm:col-span-2">
-              <label className="font-semibold text-slate-600">Nama Lengkap *</label>
-              <input type="text" required value={formData.name || ''} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" />
-            </div>
-            
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Tingkatan Pengurus *</label>
-              <select value={formData.category || 'MWC'} onChange={(e) => updateField('category', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
-                <option value="MWC">MWC (Tingkat Kecamatan)</option>
-                <option value="Ranting">Ranting (Tingkat Desa)</option>
-              </select>
-            </div>
-
-            {formData.category === 'Ranting' && (
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-600">Ranting Desa *</label>
-                <select value={formData.rantingId || 'r1'} onChange={(e) => updateField('rantingId', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
-                  {rantings.filter(r => r.id !== 'mwc').map(r => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
+            {/* Context banner when opened from Banom/Lembaga detail page */}
+            {formContext && (
+              <div className="col-span-1 sm:col-span-2 p-3 bg-tosca-50 border border-tosca-200 rounded-xl flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-lg bg-tosca-100 flex items-center justify-center text-tosca-700 text-xs font-extrabold shrink-0">
+                  {formContext.groupType === 'Banom' ? 'B' : 'L'}
+                </div>
+                <div>
+                  <span className="text-[10px] text-tosca-600 font-bold uppercase block">Context Otomatis</span>
+                  <span className="text-xs font-bold text-tosca-800">
+                    {formContext.groupType === 'Banom' ? 'Banom' : 'Lembaga'}: {formContext.groupName} • {formContext.category === 'MWC' ? 'MWC NU Bungah' : rantings.find(r => r.id === formContext.rantingId)?.name || formContext.rantingId}
+                  </span>
+                </div>
               </div>
             )}
 
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Kategori Struktur (Harian / Banom / Lembaga) *</label>
-              <select 
-                value={formData.groupType || 'Harian'} 
-                onChange={(e) => {
-                  const gt = e.target.value as 'Harian' | 'Banom' | 'Lembaga';
-                  updateField('groupType', gt);
-                  if (gt === 'Harian') {
-                    updateField('groupName', '');
-                  } else if (gt === 'Banom') {
-                    updateField('groupName', 'GP Ansor');
-                  } else if (gt === 'Lembaga') {
-                    updateField('groupName', 'LAZISNU');
-                  }
+            {/* Name field — always shown, but context may hide it for kader selection */}
+            {!formContext && (
+              <div className="space-y-1 col-span-1 sm:col-span-2">
+                <label className="font-semibold text-slate-600">Nama Lengkap *</label>
+                <input type="text" required value={formData.name || ''} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" />
+              </div>
+            )}
+            
+            {/* Category, Ranting, GroupType, GroupName — hidden when formContext is provided */}
+            {!formContext && (
+              <>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-600">Tingkatan Pengurus *</label>
+                  <select value={formData.category || 'MWC'} onChange={(e) => updateField('category', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
+                    <option value="MWC">MWC (Tingkat Kecamatan)</option>
+                    <option value="Ranting">Ranting (Tingkat Desa)</option>
+                  </select>
+                </div>
+
+                {formData.category === 'Ranting' && (
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-600">Ranting Desa *</label>
+                    <select value={formData.rantingId || 'r1'} onChange={(e) => updateField('rantingId', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
+                      {rantings.filter(r => r.id !== 'mwc').map(r => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-600">Kategori Struktur (Harian / Banom / Lembaga) *</label>
+                  <select 
+                    value={formData.groupType || 'Harian'} 
+                    onChange={(e) => {
+                      const gt = e.target.value as 'Harian' | 'Banom' | 'Lembaga';
+                      updateField('groupType', gt);
+                      if (gt === 'Harian') {
+                        updateField('groupName', '');
+                      } else if (gt === 'Banom') {
+                        updateField('groupName', 'GP Ansor');
+                      } else if (gt === 'Lembaga') {
+                        updateField('groupName', 'LAZISNU');
+                      }
                 }} 
                 className="w-full bg-white border border-slate-200 rounded p-2 font-semibold text-slate-700"
               >
@@ -497,6 +533,8 @@ export default function AdminCMSForm({
                 )}
               </div>
             )}
+            </>
+            )}
 
             <div className="space-y-1">
               <label className="font-semibold text-slate-600">Jabatan / Peran di Struktur *</label>
@@ -512,20 +550,125 @@ export default function AdminCMSForm({
               <input type="email" value={formData.email || ''} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" placeholder="Contoh: mail@domain.com" />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Status Kaderisasi</label>
-              <select value={formData.kaderisasiStatus || 'Belum'} onChange={(e) => updateField('kaderisasiStatus', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2">
-                <option value="Belum">Belum Kaderisasi</option>
-                <option value="PD-PKPNU">PD-PKPNU</option>
-                <option value="PMKNU">PMKNU</option>
-                <option value="MKNU">MKNU</option>
-                <option value="Penyetaraan">Penyetaraan</option>
+              <label className="font-semibold text-slate-600">Status Kaderisasi *</label>
+              <select value={formData.kaderisasiStatus || 'Belum'} onChange={(e) => {
+                const val = e.target.value;
+                updateField('kaderisasiStatus', val);
+                // Reset kader selection when status changes
+                if (val === 'Belum') {
+                  updateField('kaderId', '');
+                }
+              }} className="w-full bg-white border border-slate-200 rounded p-2">
+                <option value="Belum">Belum Kaderisasi (Entri Baru)</option>
+                <option value="PD-PKPNU">PD-PKPNU (Pilih dari Data Kader)</option>
+                <option value="MKNU">MKNU (Pilih dari Data Kader)</option>
+                <option value="Penyetaraan">Penyetaraan (Pilih dari Data Kader)</option>
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Pendidikan Akhir</label>
-              <input type="text" value={formData.education || ''} onChange={(e) => updateField('education', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Contoh: S1, S2, SMA, Pesantren" />
-            </div>
-            {renderUploader('photoUrl')}
+
+            {/* Jika sudah kaderisasi: tampilkan dropdown pilih kader */}
+            {(formData.kaderisasiStatus === 'PD-PKPNU' || formData.kaderisasiStatus === 'MKNU' || formData.kaderisasiStatus === 'Penyetaraan') && (
+              <div className="col-span-1 sm:col-span-2 space-y-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl animate-fadeIn">
+                <label className="font-semibold text-emerald-800 text-sm flex items-center space-x-2">
+                  <span>👤</span><span>Pilih dari Data Kader (sudah PD-PKPNU)</span>
+                </label>
+                <p className="text-[10px] text-emerald-700 font-medium">Pilih nama kader yang sudah terdaftar. Data otomatis terisi ke form pengurus.</p>
+                {/* Search input for kader */}
+                <input
+                  type="text"
+                  placeholder="🔍 Ketik nama kader untuk mencari..."
+                  value={kaderSearchLocal}
+                  onChange={(e) => setKaderSearchLocal(e.target.value)}
+                  className="w-full bg-white border border-emerald-300 rounded p-2 text-sm"
+                />
+                {/* Filtered kader list */}
+                <div className="max-h-48 overflow-y-auto space-y-1 bg-white border border-emerald-200 rounded-lg p-1">
+                  {kaderList
+                    .filter(k => {
+                      if (editItemId && formData.kaderId === k.id) return true;
+                      if (!kaderSearchLocal) return true;
+                      return k.name.toLowerCase().includes(kaderSearchLocal.toLowerCase()) ||
+                             (k.role || '').toLowerCase().includes(kaderSearchLocal.toLowerCase());
+                    })
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .slice(0, 30)
+                    .map(k => (
+                      <button
+                        key={k.id}
+                        type="button"
+                        onClick={() => {
+                          updateField('kaderId', k.id);
+                          updateField('name', k.name);
+                          updateField('phone', k.phone || '');
+                          updateField('education', k.angkatan ? `Angkatan ${k.angkatan}` : 'S1');
+                          if (k.photoUrl) updateField('photoUrl', k.photoUrl);
+                          setKaderSearchLocal('');
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center justify-between ${formData.kaderId === k.id ? 'bg-emerald-100 border border-emerald-300' : 'hover:bg-slate-50 border border-transparent'}`}
+                      >
+                        <div>
+                          <span className="font-bold text-gray-800 block">{k.name}</span>
+                          <span className="text-[10px] text-slate-500">{k.role || 'Kader'} • {k.banom || 'Umum'} • {k.phone || '-'}</span>
+                        </div>
+                        {formData.kaderId === k.id && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                      </button>
+                    ))}
+                  {kaderList.filter(k => !kaderSearchLocal || k.name.toLowerCase().includes(kaderSearchLocal.toLowerCase())).length === 0 && (
+                    <p className="text-[10px] text-slate-400 italic py-2 text-center">Tidak ditemukan kader dengan nama tersebut.</p>
+                  )}
+                </div>
+                {formData.kaderId && (
+                  <div className="flex items-center space-x-2 text-[10px] text-emerald-700 font-semibold">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Kader dipilih: {formData.name} — data akan terhubung ke Data Kader.</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Jika belum kaderisasi: tampilkan form entri baru */}
+            {formData.kaderisasiStatus === 'Belum' && (
+              <>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-600">Nama Lengkap *</label>
+                  <input type="text" required value={formData.name || ''} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Nama lengkap pengurus" />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-600">No. HP / WA *</label>
+                  <input type="text" required value={formData.phone || ''} onChange={(e) => updateField('phone', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" placeholder="Contoh: 081234567890" />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-600">Email</label>
+                  <input type="email" value={formData.email || ''} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 font-mono" placeholder="Contoh: mail@domain.com" />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-600">Pendidikan Akhir</label>
+                  <input type="text" value={formData.education || ''} onChange={(e) => updateField('education', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" placeholder="Contoh: S1, S2, SMA, Pesantren" />
+                </div>
+                {renderUploader('photoUrl')}
+              </>
+            )}
+
+            {/* Jika sudah kaderisasi tapi belum pilih kader: tampilkan nama manual + hint */}
+            {(formData.kaderisasiStatus === 'PD-PKPNU' || formData.kaderisasiStatus === 'MKNU' || formData.kaderisasiStatus === 'Penyetaraan') && !formData.kaderId && (
+              <div className="col-span-1 sm:col-span-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[10px] text-amber-800 font-semibold">
+                ⚠️ Silakan pilih nama kader di atas, atau isi manual jika kader belum terdaftar di Data Kader.
+              </div>
+            )}
+
+            {/* Jika sudah kaderisasi dan sudah pilih kader: tampilkan info ringkas */}
+            {(formData.kaderisasiStatus === 'PD-PKPNU' || formData.kaderisasiStatus === 'MKNU' || formData.kaderisasiStatus === 'Penyetaraan') && formData.kaderId && (
+              <div className="col-span-1 sm:col-span-2 bg-white border border-emerald-200 rounded-xl p-3">
+                <div className="flex items-center space-x-3">
+                  <img src={formData.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} alt="" className="w-12 h-12 rounded-xl object-contain border border-slate-200 bg-slate-50" />
+                  <div>
+                    <span className="text-xs font-bold text-gray-900 block">{formData.name}</span>
+                    <span className="text-[10px] text-slate-500">{formData.phone} • {formData.education}</span>
+                    <span className="text-[10px] text-emerald-600 font-bold block">✓ Terkait ke Data Kader (ID: {formData.kaderId})</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -544,8 +687,8 @@ export default function AdminCMSForm({
               <input type="text" required value={formData.location || ''} onChange={(e) => updateField('location', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" />
             </div>
             <div className="space-y-1">
-              <label className="font-semibold text-slate-600">Penyelenggara *</label>
-              <input type="text" required value={formData.organizer || ''} onChange={(e) => updateField('organizer', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2" />
+              <label className="font-semibold text-slate-600">Penyelenggara *{formContext?.organizer && ' (Otomatis)'}</label>
+              <input type="text" required value={formData.organizer || ''} onChange={(e) => updateField('organizer', e.target.value)} readOnly={!!formContext?.organizer} className={`w-full border border-slate-200 rounded p-2 ${formContext?.organizer ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-white'}`} />
             </div>
             <div className="space-y-1">
               <label className="font-semibold text-slate-600">Target Peserta</label>

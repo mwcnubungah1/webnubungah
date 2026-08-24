@@ -1160,3 +1160,34 @@ export const mockAspirasi: Aspirasi[] = [
     status: 'Masuk'
   }
 ];
+
+// ====================================================================
+// URL SLUG HELPERS: Convert ranting name <-> URL-friendly slug
+// ====================================================================
+
+/** Convert a ranting name to a URL-friendly slug. e.g. "PRNU Bungah" → "ranting-bungah", "MWC NU BUNGAH" → "mwc" */
+export function rantingNameToSlug(name: string): string {
+  const n = name.toUpperCase().trim();
+  if (n.includes('MWC')) return 'mwc';
+  // Strip PRNU prefix
+  const stripped = n.replace(/^PRNU\s+/i, '').trim();
+  return 'ranting-' + stripped
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/** Convert a URL slug back to a ranting ID by matching against rantings list.
+ *  e.g. "ranting-bungah" → "r17", "mwc" → "mwc" */
+export function slugToRantingId(slug: string, rantings: { id: string; name: string }[]): string {
+  const s = slug.toLowerCase().trim();
+  if (s === 'mwc') return 'mwc';
+  // Try to match by converting each ranting name to slug
+  for (const r of rantings) {
+    if (rantingNameToSlug(r.name) === s) return r.id;
+  }
+  // Fallback: try direct ID match
+  const directMatch = rantings.find(r => r.id === s);
+  if (directMatch) return s;
+  return slug; // Return as-is if no match
+}

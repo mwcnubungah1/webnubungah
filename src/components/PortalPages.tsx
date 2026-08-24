@@ -69,6 +69,8 @@ import {
   Role
 } from '../types';
 import { isCloudinaryConfigured, uploadToCloudinary } from '../lib/cloudinaryClient';
+import { isSupabaseConfigured, insertTableData, updateTableData, deleteTableData } from '../lib/supabaseClient';
+import AdminCMSForm from './AdminCMSForm';
 import { parseCSVLine, parseBirth, mapUnsurToBanom, mapRantingToId, mapAngkatanToYear } from '../data/mockData';
 
 interface PortalPagesProps {
@@ -81,6 +83,7 @@ interface PortalPagesProps {
   kaderList: Kader[];
   setKaderList?: React.Dispatch<React.SetStateAction<Kader[]>>;
   kegiatanList: Kegiatan[];
+  setKegiatanList?: React.Dispatch<React.SetStateAction<Kegiatan[]>>;
   kasList: TransparansiDana[];
   koinList: KoinS3[];
   suratList: Persuratan[];
@@ -95,6 +98,10 @@ interface PortalPagesProps {
   setDokumentasiList?: React.Dispatch<React.SetStateAction<Dokumentasi[]>>;
   aspirasiList: Aspirasi[];
   addAspirasi: (aspirasi: Omit<Aspirasi, 'id' | 'date' | 'status'>) => void;
+  refetchData?: () => Promise<void>;
+  profileSubPath?: string;
+  setProfileSubPath?: (path: string) => void;
+  setPengurusList?: React.Dispatch<React.SetStateAction<Pengurus[]>>;
 }
 
 export default function PortalPages({
@@ -107,6 +114,7 @@ export default function PortalPages({
   kaderList,
   setKaderList,
   kegiatanList,
+  setKegiatanList,
   kasList,
   koinList,
   suratList,
@@ -120,7 +128,11 @@ export default function PortalPages({
   dokumentasiList,
   setDokumentasiList,
   aspirasiList,
-  addAspirasi
+  addAspirasi,
+  refetchData,
+  profileSubPath = '',
+  setProfileSubPath,
+  setPengurusList
 }: PortalPagesProps) {
 
   // For viewing full news
@@ -141,28 +153,56 @@ export default function PortalPages({
   const [editingEstablished, setEditingEstablished] = useState(false);
   const [editingEstablishedValue, setEditingEstablishedValue] = useState('');
 
-  // Ranting edit/delete handlers
-  const handleEditRantingField = (rantingId: string, field: string, value: string) => {
+  // State for admin editing on Banom/Lembaga detail pages
+  const [editingBanomField, setEditingBanomField] = useState<string | null>(null);
+  const [editingBanomValue, setEditingBanomValue] = useState('');
+  const [showAssignKader, setShowAssignKader] = useState(false);
+  const [banomKaderSearch, setBanomKaderSearch] = useState('');
+
+  // State for inline pengurus form on Banom/Lembaga detail pages
+  const [showPengurusForm, setShowPengurusForm] = useState(false);
+  const [pengurusFormContext, setPengurusFormContext] = useState<{ groupType: string; groupName: string; rantingId: string }>({ groupType: '', groupName: '', rantingId: '' });
+  const [pengurusFormEditId, setPengurusFormEditId] = useState<string | null>(null);
+
+  // State for inline kegiatan form on Banom/Lembaga detail pages
+  const [showKegiatanForm, setShowKegiatanForm] = useState(false);
+  const [kegiatanFormContext, setKegiatanFormContext] = useState<{ organizer: string }>({ organizer: '' });
+
+  // Ranting edit/delete handlers — all writes go through Supabase
+  const handleEditRantingField = async (rantingId: string, field: string, value: string) => {
     if (!setRantings) return;
-    setRantings(prev => {
-      const updated = prev.map(r => r.id === rantingId ? { ...r, [field]: value } : r);
-      localStorage.setItem('mwc_nu_rantings', JSON.stringify(updated));
-      return updated;
-    });
+    // Optimistic update local state
+    setRantings(prev => prev.map(r => r.id === rantingId ? { ...r, [field]: value } : r));
+    // Persist to Supabase
+    if (isSupabaseConfigured) {
+      try {
+        await updateTableData('ranting', rantingId, { [field === 'established' ? 'established' : field]: value });
+        // Re-fetch to confirm consistency
+        if (refetchData) await refetchData();
+      } catch (err: any) {
+        console.error('Gagal menyimpan perubahan ke Supabase:', err);
+      }
+    }
   };
 
-  const handleDeleteRanting = (rantingId: string, rantingName: string) => {
+  const handleDeleteRanting = async (rantingId: string, rantingName: string) => {
     if (!setRantings) return;
     if (rantingId === 'mwc') {
       alert('Tidak dapat menghapus data MWC NU Bungah.');
       return;
     }
     if (!window.confirm(`Apakah Anda yakin ingin menghapus profil "${rantingName}" secara permanen?`)) return;
-    setRantings(prev => {
-      const updated = prev.filter(r => r.id !== rantingId);
-      localStorage.setItem('mwc_nu_rantings', JSON.stringify(updated));
-      return updated;
-    });
+    // Optimistic update
+    setRantings(prev => prev.filter(r => r.id !== rantingId));
+    // Delete from Supabase
+    if (isSupabaseConfigured) {
+      try {
+        await deleteTableData('ranting', rantingId);
+        if (refetchData) await refetchData();
+      } catch (err: any) {
+        console.error('Gagal menghapus dari Supabase:', err);
+      }
+    }
   };
 
   const handleFileUpload = async (file: File) => {
@@ -189,9 +229,18 @@ export default function PortalPages({
     }
   };
 
-  const handleSaveRantingPhoto = (newUrl: string) => {
+  const handleSaveRantingPhoto = async (newUrl: string) => {
     if (setRantings && selectedRantingProfileId) {
       setRantings(prev => prev.map(r => r.id === selectedRantingProfileId ? { ...r, imageUrl: newUrl } : r));
+      // Persist to Supabase
+      if (isSupabaseConfigured) {
+        try {
+          await updateTableData('ranting', selectedRantingProfileId, { imageUrl: newUrl });
+          if (refetchData) await refetchData();
+        } catch (err: any) {
+          console.error('Gagal menyimpan foto ke Supabase:', err);
+        }
+      }
     }
     setShowRantingPhotoModal(false);
   };
@@ -218,13 +267,14 @@ export default function PortalPages({
     }
   };
 
-  const handleSaveSK = () => {
+  const handleSaveSK = async () => {
     if (!skNumber || !skPeriod || !skFileUrl) {
       setUploadSKError('Harap lengkapi semua kolom.');
       return;
     }
     
     if (setRantings && selectedRantingProfileId) {
+      // Optimistic update
       setRantings(prev => prev.map(r => {
         if (r.id !== selectedRantingProfileId) return r;
         
@@ -247,6 +297,32 @@ export default function PortalPages({
           skDocs: [newSK, ...updatedSKs]
         };
       }));
+      // Persist to Supabase
+      if (isSupabaseConfigured) {
+        try {
+          const current = rantings.find(r => r.id === selectedRantingProfileId);
+          if (current) {
+            const newSK = {
+              id: 'sk-' + Date.now(),
+              number: skNumber,
+              period: skPeriod,
+              fileUrl: skFileUrl,
+              uploadDate: new Date().toISOString().split('T')[0],
+              isLatest: skIsLatest
+            };
+            const currentSKs = current.skDocs || [];
+            const updatedSKs = skIsLatest 
+              ? currentSKs.map(sk => ({ ...sk, isLatest: false }))
+              : currentSKs;
+            await updateTableData('ranting', selectedRantingProfileId, {
+              skDocs: [newSK, ...updatedSKs]
+            });
+            if (refetchData) await refetchData();
+          }
+        } catch (err: any) {
+          console.error('Gagal menyimpan SK ke Supabase:', err);
+        }
+      }
     }
     
     // Reset form
@@ -258,8 +334,9 @@ export default function PortalPages({
     setShowSKUploadModal(false);
   };
 
-  const handleDeleteSK = (skId: string) => {
+  const handleDeleteSK = async (skId: string) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus SK ini?') && setRantings && selectedRantingProfileId) {
+      // Optimistic update
       setRantings(prev => prev.map(r => {
         if (r.id !== selectedRantingProfileId) return r;
         const filteredSKs = (r.skDocs || []).filter(sk => sk.id !== skId);
@@ -271,7 +348,117 @@ export default function PortalPages({
           skDocs: filteredSKs
         };
       }));
+      // Persist to Supabase
+      if (isSupabaseConfigured) {
+        try {
+          const current = rantings.find(r => r.id === selectedRantingProfileId);
+          if (current) {
+            const filteredSKs = (current.skDocs || []).filter(sk => sk.id !== skId);
+            if (filteredSKs.length > 0 && !filteredSKs.some(sk => sk.isLatest)) {
+              filteredSKs[0].isLatest = true;
+            }
+            await updateTableData('ranting', selectedRantingProfileId, {
+              skDocs: filteredSKs
+            });
+            if (refetchData) await refetchData();
+          }
+        } catch (err: any) {
+          console.error('Gagal menghapus SK dari Supabase:', err);
+        }
+      }
     }
+  };
+
+  // Pengurus form handler for Banom/Lembaga detail pages
+  const handlePengurusFormSubmit = async (data: any) => {
+    if (!setPengurusList) return;
+    const context = pengurusFormContext;
+    const itemWithGroup = {
+      ...data,
+      groupType: context.groupType as 'Banom' | 'Lembaga',
+      groupName: context.groupName,
+      category: 'Ranting' as const,
+      rantingId: context.rantingId
+    };
+
+    const { kaderId: _kaderId, ...dataForDb } = itemWithGroup;
+
+    if (pengurusFormEditId) {
+      // Edit mode
+      let updatedItem = itemWithGroup;
+      if (isSupabaseConfigured) {
+        try {
+          updatedItem = await updateTableData('pengurus', pengurusFormEditId, dataForDb);
+        } catch (e: any) {
+          console.warn('Supabase update failed:', e);
+          updatedItem = { ...itemWithGroup, id: pengurusFormEditId };
+        }
+      }
+      setPengurusList(prev => prev.map(p => p.id === pengurusFormEditId ? updatedItem : p));
+    } else {
+      // Add mode
+      const localId = `p-${Date.now()}`;
+      const itemToSave = { ...dataForDb, id: localId };
+      let savedItem = itemToSave;
+      if (isSupabaseConfigured) {
+        try {
+          savedItem = await insertTableData('pengurus', itemToSave);
+        } catch (e: any) {
+          console.warn('Supabase insert failed:', e);
+          savedItem = itemToSave;
+        }
+      }
+      // Re-attach kaderId for local state
+      if (_kaderId) (savedItem as any).kaderId = _kaderId;
+      setPengurusList(prev => [savedItem, ...prev]);
+    }
+
+    // If kaderId is linked, update the kader record to reflect their pengurus role
+    if (itemWithGroup.kaderId && setKaderList) {
+      const kaderRole = `${itemWithGroup.role} — ${itemWithGroup.groupName || itemWithGroup.groupType}`;
+      setKaderList(prev => prev.map(k => k.id === itemWithGroup.kaderId ? { ...k, role: kaderRole, banom: (itemWithGroup.groupName || 'Lainnya') as any } : k));
+      if (isSupabaseConfigured) {
+        try {
+          await updateTableData('kader', itemWithGroup.kaderId, { role: kaderRole, banom: itemWithGroup.groupName || 'Lainnya' });
+        } catch (e) { console.error('Gagal update data kader:', e); }
+      }
+    }
+    setShowPengurusForm(false);
+    setPengurusFormEditId(null);
+  };
+
+  const openPengurusForm = (groupType: string, groupName: string, rantingId: string, editId?: string) => {
+    setPengurusFormContext({ groupType, groupName, rantingId });
+    setPengurusFormEditId(editId || null);
+    setShowPengurusForm(true);
+  };
+
+  // Kegiatan form handler for Banom/Lembaga detail pages
+  const handleKegiatanFormSubmit = async (data: any) => {
+    if (!setKegiatanList) return;
+    const itemWithOrganizer = {
+      ...data,
+      organizer: kegiatanFormContext.organizer
+    };
+
+    const localId = `e-${Date.now()}`;
+    const itemToSave = { ...itemWithOrganizer, id: localId };
+    let savedItem = itemToSave;
+    if (isSupabaseConfigured) {
+      try {
+        savedItem = await insertTableData('kegiatan', itemToSave);
+      } catch (e: any) {
+        console.warn('Supabase insert failed:', e);
+        savedItem = itemToSave;
+      }
+    }
+    setKegiatanList(prev => [savedItem, ...prev]);
+    setShowKegiatanForm(false);
+  };
+
+  const openKegiatanForm = (organizer: string) => {
+    setKegiatanFormContext({ organizer });
+    setShowKegiatanForm(true);
   };
 
   // CSV Template and Bulk Importer handlers (Kader & Profil Ranting)
@@ -904,9 +1091,525 @@ export default function PortalPages({
   };
 
   // ==========================================
+  // DETAIL PAGE: BANOM / LEMBAGA
+  // ==========================================
+  const renderBanomLembagaDetail = (rantingId: string, groupType: string, groupId: string) => {
+    const ranting = rantings.find(r => r.id === rantingId);
+    const isBanom = groupType === 'banom';
+    const isAdmin = userRole && userRole !== 'guest';
+
+    // Definitions
+    const banomDefs: Record<string, { name: string; desc: string }> = {
+      'Muslimat NU': { name: 'Muslimat Nahdlatul Ulama', desc: 'Wadah perjuangan wanita Islam NU (ibu-ibu/dewasa).' },
+      'GP Ansor': { name: 'Gerakan Pemuda Ansor (GP Ansor)', desc: 'Wadah perjuangan pemuda NU.' },
+      'Fatayat NU': { name: 'Fatayat Nahdlatul Ulama', desc: 'Wadah perjuangan pemuda wanita/perempuan muda NU.' },
+      'IPNU': { name: 'Ikatan Pelajar Nahdlatul Ulama (IPNU)', desc: 'Wadah perjuangan pelajar dan santri laki-laki NU.' },
+      'IPPNU': { name: 'Ikatan Pelajar Putri Nahdlatul Ulama (IPPNU)', desc: 'Wadah perjuangan pelajar dan santri perempuan NU.' },
+      'PMII': { name: 'Pergerakan Mahasiswa Islam Indonesia (PMII)', desc: 'Wadah perjuangan mahasiswa NU.' },
+      'ISNU': { name: 'Ikatan Sarjana Nahdlatul Ulama (ISNU)', desc: 'Wadah para sarjana, intelektual, dan akademisi NU.' },
+      'JARTMAN': { name: "Jam'iyyah Ahli Thariqah al-Mu'tabarah an-Nahdliyyah (JARTMAN)", desc: 'Wadah pengamal ajaran thariqah.' },
+      'JQH': { name: "Jam'iyyatul Qurra wal Huffazh (JQH)", desc: 'Wadah para qari/qariah dan hafizh/hafizhah.' },
+      'Pergunu': { name: 'Persatuan Guru Nahdlatul Ulama (Pergunu)', desc: 'Wadah perjuangan para guru dan pendidik NU.' },
+      'Sarbumusi': { name: 'Serikat Buruh Muslimin Indonesia (Sarbumusi)', desc: 'Wadah perjuangan para buruh dan pekerja NU.' },
+      'Pagar Nusa': { name: 'Ikatan Pencak Silat Pagar Nusa (IPS Pagar Nusa)', desc: 'Wadah seni bela diri pencak silat di lingkungan NU.' },
+      'Lesbumi': { name: 'Lembaga Seniman Budayawan Muslimin Indonesia (Lesbumi)', desc: 'Wadah di bidang seni dan kebudayaan.' }
+    };
+    const lembagaDefs: Record<string, { name: string; desc: string }> = {
+      'LDNU': { name: 'Lembaga Dakwah Nahdlatul Ulama (LDNU)', desc: 'Melaksanakan kebijakan NU di bidang dakwah Islamiyah.' },
+      'LPMNU': { name: 'Lembaga Pendidikan Ma\'arif NU (LPMNU)', desc: 'Menyelenggarakan dan mengelola pendidikan formal.' },
+      'RMI-NU': { name: 'Rabithah Ma\'ahid al-Islamiyah (RMI-NU)', desc: 'Asosiasi pondok pesantren NU.' },
+      'LKKNU': { name: 'Lembaga Kemaslahatan Keluarga NU (LKKNU)', desc: 'Bergerak di bidang kesejahteraan keluarga.' },
+      'LTMNU': { name: 'Lembaga Takmir Masjid NU (LTMNU)', desc: 'Mengurus pengelolaan dan pemakmuran masjid-masjid NU.' },
+      'LAZISNU': { name: 'Lembaga Amil Zakat, Infak, dan Sedekah NU (LAZISNU)', desc: 'Menghimpun, mengelola, dan mendistribusikan zakat, infak, sedekah.' },
+      'LKNU': { name: 'Lembaga Kesehatan Nahdlatul Ulama (LKNU)', desc: 'Melaksanakan kebijakan NU di bidang kesehatan.' },
+      'LAKPESDAM': { name: 'Lembaga Kajian dan Pengembangan SDM (LAKPESDAM)', desc: 'Fokus pada kajian strategis dan pengembangan kapasitas SDM.' },
+      'LPBHNU': { name: 'Lembaga Penyuluhan dan Bantuan Hukum NU (LPBHNU)', desc: 'Advokasi, penyuluhan, dan bantuan hukum.' },
+      'LPNU': { name: 'Lembaga Perekonomian Nahdlatul Ulama (LPNU)', desc: 'Mengembangkan ekonomi warga dan kewirausahaan.' },
+      'LP2NU': { name: 'Lembaga Pengembangan Pertanian NU (LP2NU)', desc: 'Mengembangkan bidang pertanian dan ketahanan pangan.' },
+      'LBMNU': { name: 'Lembaga Bahtsul Masail NU (LBMNU)', desc: 'Membahas dan memecahkan masalah-masalah keagamaan.' },
+      'LESBUMI': { name: 'Lembaga Seniman Budayawan Muslimin Indonesia (LESBUMI)', desc: 'Kebijakan NU di bidang kebudayaan dan seni.' },
+      'LTNNU': { name: 'Lembaga Talif wan Nasyr NU (LTNNU)', desc: 'Lembaga infokom, penerbitan, media, dan dokumentasi.' },
+      'LPBI-NU': { name: 'Lembaga Penanggulangan Bencana & Perubahan Iklim (LPBI-NU)', desc: 'Mitigasi bencana, tanggap darurat, dan lingkungan hidup.' },
+      'LF-NU': { name: 'Lembaga Falakiyah NU (LF-NU)', desc: 'Mengelola urusan hisab dan rukyat.' },
+      'LWPNU': { name: 'Lembaga Wakaf dan Pertanahan NU (LWPNU)', desc: 'Mengurus sertifikasi dan pengelolaan aset tanah NU.' }
+    };
+
+    const defs = isBanom ? banomDefs : lembagaDefs;
+    const def = defs[groupId];
+    const groupLabel = isBanom ? 'Badan Otonom (Banom)' : 'Lembaga';
+    const groupColor = isBanom ? 'emerald' : 'blue';
+
+    if (!ranting) {
+      return (
+        <div className="p-6 text-center bg-white rounded-2xl border border-gray-200">
+          <p className="text-sm font-bold text-red-500">Ranting tidak ditemukan.</p>
+          <button onClick={() => setProfileSubPath?.('')} className="mt-4 px-4 py-2 bg-tosca-600 text-white text-xs font-bold rounded-xl">Kembali</button>
+        </div>
+      );
+    }
+
+    // --- Kader filtering: map group ID to banom field values ---
+    const banomToKaderBanom: Record<string, string[]> = {
+      'Muslimat NU': ['Muslimat'],
+      'GP Ansor': ['Ansor', 'Banser'],
+      'Fatayat NU': ['Fatayat'],
+      'IPNU': ['IPNU'],
+      'IPPNU': ['IPPNU'],
+      'Pagar Nusa': ['Pagar Nusa'],
+      'PMII': ['Lainnya'],
+      'ISNU': ['Lainnya'],
+      'JARTMAN': ['Lainnya'],
+      'JQH': ['Lainnya'],
+      'Pergunu': ['Lainnya'],
+      'Sarbumusi': ['Lainnya'],
+      'Lesbumi': ['Lainnya']
+    };
+    const matchedBanomValues = banomToKaderBanom[groupId] || [];
+
+    // Filter related data
+    const groupPengurus = pengurusList.filter(p => p.groupType === (isBanom ? 'Banom' : 'Lembaga') && p.groupName === groupId);
+    // Kader: filter by matching banom field AND ranting
+    const rKader = kaderList.filter(k => {
+      const rantingMatch = ranting.id === 'mwc' ? true : k.rantingId === ranting.id;
+      const banomMatch = matchedBanomValues.length > 0
+        ? matchedBanomValues.includes(k.banom)
+        : k.banom === 'Lainnya'; // If no mapping, show unmapped kader
+      return rantingMatch && banomMatch;
+    });
+    // All kader in this ranting (for assign dropdown)
+    const allRantingKader = kaderList.filter(k => ranting.id === 'mwc' ? true : k.rantingId === ranting.id);
+    const rKegiatan = kegiatanList.filter(k => k.organizer.toLowerCase().includes(groupId.toLowerCase()) || k.description?.toLowerCase().includes(groupId.toLowerCase()));
+    const rKas = kasList.filter(k => k.description?.toLowerCase().includes(groupId.toLowerCase()));
+    const rSurat = suratList.filter(s => s.subject?.toLowerCase().includes(groupId.toLowerCase()));
+    const rDokumentasi = dokumentasiList.filter(d => d.title?.toLowerCase().includes(groupId.toLowerCase()) || d.category?.toLowerCase().includes(groupId.toLowerCase()));
+
+    // --- Admin helpers ---
+    const startEdit = (field: string, currentValue: string) => {
+      setEditingBanomField(field);
+      setEditingBanomValue(currentValue || '');
+    };
+    const saveEdit = async (field: string, rantingUpdateField?: string) => {
+      if (setRantings && rantingUpdateField) {
+        setRantings(prev => prev.map(r => r.id === rantingId ? { ...r, [rantingUpdateField]: editingBanomValue } : r));
+        if (isSupabaseConfigured) {
+          try { await updateTableData('ranting', rantingId, { [rantingUpdateField]: editingBanomValue }); } catch (e) { console.error(e); }
+        }
+      }
+      setEditingBanomField(null);
+    };
+    const assignKaderToGroup = async (kaderId: string) => {
+      if (!setKaderList) return;
+      const targetBanom = matchedBanomValues[0] || groupId;
+      setKaderList(prev => prev.map(k => k.id === kaderId ? { ...k, banom: targetBanom as any } : k));
+      if (isSupabaseConfigured) {
+        try { await updateTableData('kader', kaderId, { banom: targetBanom }); } catch (e) { console.error(e); }
+      }
+      setShowAssignKader(false);
+      setBanomKaderSearch('');
+    };
+    const unassignKader = async (kaderId: string) => {
+      if (!setKaderList) return;
+      setKaderList(prev => prev.map(k => k.id === kaderId ? { ...k, banom: 'Lainnya' as any } : k));
+      if (isSupabaseConfigured) {
+        try { await updateTableData('kader', kaderId, { banom: 'Lainnya' }); } catch (e) { console.error(e); }
+      }
+    };
+
+    // Filter kader for assign dropdown
+    const assignableKader = allRantingKader.filter(k => {
+      const notAssigned = !matchedBanomValues.includes(k.banom);
+      const matchesSearch = !banomKaderSearch || k.name.toLowerCase().includes(banomKaderSearch.toLowerCase());
+      return notAssigned && matchesSearch;
+    });
+
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        {/* Breadcrumb */}
+        <div className="flex items-center space-x-2 text-xs">
+          <button onClick={() => { setSelectedRantingProfileId(rantingId); setProfileSubPath?.(''); }} className="text-tosca-600 hover:text-tosca-700 font-bold">← {ranting.name}</button>
+          <span className="text-slate-400">/</span>
+          <span className="text-slate-400 font-semibold">{groupLabel}</span>
+          <span className="text-slate-400">/</span>
+          <span className="text-slate-800 font-bold">{groupId}</span>
+        </div>
+
+        {/* Header Card */}
+        <div className="rounded-2xl p-6 md:p-8 text-white shadow-xl" style={{ background: isBanom ? 'linear-gradient(135deg, #047857, #064e3b)' : 'linear-gradient(135deg, #1d4ed8, #1e3a5f)' }}>
+          <div className="flex items-start justify-between">
+            <div className="space-y-2">
+              <span className="inline-flex items-center px-2.5 py-1 bg-white/15 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-wider">
+                {groupLabel} • {ranting.name}
+              </span>
+              <h1 className="text-2xl md:text-3xl font-display font-extrabold">{def?.name || groupId}</h1>
+              <p className="text-sm text-white/80 max-w-xl leading-relaxed">{def?.desc || `Profil ${groupLabel} ${groupId} tingkat ${ranting.name}.`}</p>
+            </div>
+            <span className="px-3 py-1.5 bg-white/20 backdrop-blur-md rounded-xl text-sm font-bold">
+              {groupPengurus.length} Pengurus
+            </span>
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs text-center">
+            <p className="text-2xl font-bold text-slate-900">{groupPengurus.length}</p>
+            <span className="text-[10px] text-slate-500 font-bold uppercase">Pengurus</span>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs text-center">
+            <p className="text-2xl font-bold text-slate-900">{rKader.length}</p>
+            <span className="text-[10px] text-slate-500 font-bold uppercase">Kader Terkait</span>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs text-center">
+            <p className="text-2xl font-bold text-slate-900">{rKegiatan.length}</p>
+            <span className="text-[10px] text-slate-500 font-bold uppercase">Kegiatan</span>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs text-center">
+            <p className="text-2xl font-bold text-slate-900">{rDokumentasi.length}</p>
+            <span className="text-[10px] text-slate-500 font-bold uppercase">Dokumentasi</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column: Sejarah & Struktur */}
+          <div className="space-y-6">
+            {/* Sejarah & Profil */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="font-bold text-gray-900 text-sm">📖 Sejarah & Profil</h3>
+                {isAdmin && editingBanomField !== 'history' && (
+                  <button onClick={() => startEdit('history', def?.desc || '')} className="text-[10px] text-tosca-600 hover:text-tosca-700 font-bold flex items-center space-x-1"><Pencil className="w-3 h-3" /><span>Edit</span></button>
+                )}
+              </div>
+              {editingBanomField === 'history' ? (
+                <div className="space-y-2">
+                  <textarea value={editingBanomValue} onChange={e => setEditingBanomValue(e.target.value)} className="w-full p-2 border border-tosca-300 rounded-lg text-xs focus:ring-2 focus:ring-tosca-200" rows={4} />
+                  <div className="flex space-x-2">
+                    <button onClick={() => saveEdit('history')} className="px-3 py-1 bg-tosca-600 text-white text-[10px] font-bold rounded-lg">Simpan</button>
+                    <button onClick={() => setEditingBanomField(null)} className="px-3 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg">Batal</button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {def?.desc || `${groupId} merupakan ${groupLabel.toLowerCase()} tingkat ${ranting.village} yang tergabung dalam ${ranting.name}. Organisasi ini berperan aktif dalam kegiatan keagamaan, sosial, dan kaderisasi di lingkungan ${ranting.village}.`}
+                </p>
+              )}
+              <div className="space-y-1.5">
+                <div className="flex items-center space-x-2 text-xs text-slate-600"><Building2 className="w-3.5 h-3.5 text-tosca-600" /><span>{ranting.address || ranting.village}</span></div>
+                {ranting.phone && <div className="flex items-center space-x-2 text-xs text-slate-600"><Phone className="w-3.5 h-3.5 text-tosca-600" /><span>{ranting.phone}</span></div>}
+                {ranting.email && <div className="flex items-center space-x-2 text-xs text-slate-600"><Mail className="w-3.5 h-3.5 text-tosca-600" /><span>{ranting.email}</span></div>}
+              </div>
+            </div>              {/* Struktur Pengurus */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="font-bold text-gray-900 text-sm">👤 Struktur Pengurus ({groupPengurus.length})</h3>
+                {isAdmin && (
+                  <button onClick={() => openPengurusForm(isBanom ? 'Banom' : 'Lembaga', groupId, rantingId)} className="px-3 py-1 bg-tosca-600 hover:bg-tosca-700 text-white text-[10px] font-bold rounded-lg flex items-center space-x-1">
+                    <Plus className="w-3 h-3" /><span>Tambah Pengurus</span>
+                  </button>
+                )}
+              </div>
+              {groupPengurus.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Belum ada pengurus terdaftar.</p>
+              ) : (
+                <div className="space-y-2">
+                  {groupPengurus.map((p) => (
+                    <div key={p.id} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl border border-slate-100 group">
+                      <img src={p.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} alt={p.name} referrerPolicy="no-referrer" className="w-10 h-10 rounded-xl object-contain border border-slate-200 bg-white shrink-0" />
+                      <div className="min-w-0 w-full flex-1">
+                        <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider mb-1" style={isBanom ? { backgroundColor: '#ecfdf5', color: '#065f46', border: '1px solid #d1fae5' } : { backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #dbeafe' }}>{p.role || 'Anggota'}</span>
+                        <h4 className="text-xs font-bold text-gray-900 truncate">{p.name}</h4>
+                        <div className="flex items-center space-x-3 text-[9px] text-slate-500 mt-0.5">
+                          {p.education && <span>{p.education}</span>}
+                          {p.phone && <span className="font-mono">{p.phone}</span>}
+                          {p.kaderisasiStatus && (
+                            <span className={`px-1 py-0.5 rounded text-[8px] font-bold ${p.kaderisasiStatus === 'PD-PKPNU' || p.kaderisasiStatus === 'MKNU' ? 'bg-emerald-100 text-emerald-700' : p.kaderisasiStatus === 'Penyetaraan' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>{p.kaderisasiStatus}</span>
+                          )}
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <button onClick={() => openPengurusForm(isBanom ? 'Banom' : 'Lembaga', groupId, rantingId, p.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-white text-slate-400 hover:text-tosca-600" title="Edit Pengurus">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Anggota / Kader — filtered by banom */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="font-bold text-gray-900 text-sm">👥 Data Kader {groupId} ({rKader.length})</h3>
+                {isAdmin && (
+                  <button onClick={() => setShowAssignKader(!showAssignKader)} className="px-3 py-1 bg-tosca-600 hover:bg-tosca-700 text-white text-[10px] font-bold rounded-lg flex items-center space-x-1">
+                    <Plus className="w-3 h-3" /><span>Tugaskan Kader</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Assign Kader panel */}
+              {isAdmin && showAssignKader && (
+                <div className="bg-tosca-50 border border-tosca-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-tosca-800">Tugaskan Kader ke {groupId}</span>
+                    <button onClick={() => setShowAssignKader(false)} className="text-slate-400 hover:text-slate-600"><XCircle className="w-4 h-4" /></button>
+                  </div>
+                  <input type="text" placeholder="Cari nama kader..." value={banomKaderSearch} onChange={e => setBanomKaderSearch(e.target.value)} className="w-full p-2 border border-tosca-200 rounded-lg text-xs focus:ring-2 focus:ring-tosca-200" />
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {assignableKader.length === 0 ? (
+                      <p className="text-[10px] text-slate-400 italic py-2">Tidak ada kader yang bisa ditugaskan.</p>
+                    ) : (
+                      assignableKader.slice(0, 30).map(k => (
+                        <div key={k.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-100 hover:border-tosca-200 transition-all">
+                          <div>
+                            <span className="text-xs font-bold text-gray-800 block">{k.name}</span>
+                            <span className="text-[9px] text-slate-500">{k.role} • {k.banom}</span>
+                          </div>
+                          <button onClick={() => assignKaderToGroup(k.id)} className="px-2 py-1 bg-tosca-600 hover:bg-tosca-700 text-white text-[9px] font-bold rounded">Tugaskan</button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {rKader.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-xs text-slate-400 italic">Belum ada kader yang ditugaskan ke {groupId}.</p>
+                  {isAdmin && <p className="text-[10px] text-tosca-600 mt-1 font-semibold">Klik &quot;Tugaskan Kader&quot; untuk menambahkan.</p>}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead><tr className="border-b border-slate-100 text-slate-400 font-bold">
+                      <th className="text-left py-2">Nama</th><th className="text-left py-2">Jabatan</th><th className="text-left py-2">Gender</th><th className="text-left py-2">Telepon</th>
+                      {isAdmin && <th className="text-right py-2">Aksi</th>}
+                    </tr></thead>
+                    <tbody>
+                      {rKader.slice(0, 30).map((k) => (
+                        <tr key={k.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                          <td className="py-2 font-bold text-gray-800">{k.name}</td>
+                          <td className="py-2 text-slate-600">{k.role}</td>
+                          <td className="py-2 text-slate-600">{k.gender}</td>
+                          <td className="py-2 font-mono text-slate-500">{k.phone || '-'}</td>
+                          {isAdmin && (
+                            <td className="py-2 text-right">
+                              <button onClick={() => unassignKader(k.id)} className="text-[9px] text-red-500 hover:text-red-700 font-bold" title="Lepas dari grup ini">Lepas</button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {rKader.length > 30 && <p className="text-[10px] text-slate-400 mt-2 italic">Menampilkan 30 dari {rKader.length} kader.</p>}
+                </div>
+              )}
+            </div>
+
+            {/* Program / Kegiatan */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="font-bold text-gray-900 text-sm">📋 Program & Kegiatan ({rKegiatan.length})</h3>
+                {isAdmin && (
+                  <button onClick={() => openKegiatanForm(groupId)} className="px-3 py-1 bg-tosca-600 hover:bg-tosca-700 text-white text-[10px] font-bold rounded-lg flex items-center space-x-1">
+                    <Plus className="w-3 h-3" /><span>Tambah Kegiatan</span>
+                  </button>
+                )}
+              </div>
+              {rKegiatan.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Belum ada program/kegiatan terkait.</p>
+              ) : (
+                <div className="space-y-2">
+                  {rKegiatan.map((k) => (
+                    <div key={k.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-gray-800">{k.title}</h4>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${k.status === 'Selesai' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{k.status}</span>
+                      </div>
+                      <div className="flex items-center space-x-3 text-[10px] text-slate-500 mt-1">
+                        <span className="flex items-center space-x-1"><Calendar className="w-3 h-3" /><span>{k.date}</span></span>
+                        <span className="flex items-center space-x-1"><MapPin className="w-3 h-3" /><span>{k.location}</span></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Keuangan */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="font-bold text-gray-900 text-sm">💰 Transparansi Keuangan ({rKas.length})</h3>
+                {isAdmin && (
+                  <button onClick={() => setActiveTab('admin')} className="text-[10px] text-tosca-600 hover:text-tosca-700 font-bold flex items-center space-x-1"><Pencil className="w-3 h-3" /><span>Kelola</span></button>
+                )}
+              </div>
+              {rKas.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Belum ada data keuangan terkait.</p>
+              ) : (
+                <div className="space-y-2">
+                  {rKas.map((k) => (
+                    <div key={k.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div>
+                        <p className="text-xs font-bold text-gray-800">{k.description}</p>
+                        <span className="text-[10px] text-slate-500">{k.date} • {k.category}</span>
+                      </div>
+                      <span className={`text-xs font-bold ${k.type === 'Masuk' ? 'text-emerald-600' : 'text-red-600'}`}>{k.type === 'Masuk' ? '+' : '-'}{formatRupiah(k.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Persuratan */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="font-bold text-gray-900 text-sm">📮 Arsip Persuratan ({rSurat.length})</h3>
+                {isAdmin && (
+                  <button onClick={() => setActiveTab('admin')} className="text-[10px] text-tosca-600 hover:text-tosca-700 font-bold flex items-center space-x-1"><Pencil className="w-3 h-3" /><span>Kelola</span></button>
+                )}
+              </div>
+              {rSurat.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Belum ada data persuratan terkait.</p>
+              ) : (
+                <div className="space-y-2">
+                  {rSurat.map((s) => (
+                    <div key={s.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${s.type === 'Masuk' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{s.type}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{s.letterNumber}</span>
+                      </div>
+                      <p className="text-xs font-bold text-gray-800 mt-1">{s.subject}</p>
+                      <span className="text-[10px] text-slate-500">{s.date} • {s.senderOrRecipient}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Galeri Kegiatan */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="font-bold text-gray-900 text-sm">🖼️ Galeri Kegiatan ({rDokumentasi.length})</h3>
+                {isAdmin && (
+                  <button onClick={() => setActiveTab('admin')} className="text-[10px] text-tosca-600 hover:text-tosca-700 font-bold flex items-center space-x-1"><Pencil className="w-3 h-3" /><span>Kelola</span></button>
+                )}
+              </div>
+              {rDokumentasi.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Belum ada galeri kegiatan.</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {rDokumentasi.map((d) => (
+                    <div key={d.id} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 group cursor-pointer">
+                      <img src={d.url} alt={d.title} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-2.5">
+                        <span className="text-[9px] font-bold text-white leading-tight line-clamp-2">{d.title}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Modal: Form Tambah/Edit Pengurus */}
+        {showPengurusForm && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-2xl w-full border border-gray-200 shadow-xl overflow-hidden animate-scaleIn">
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <h3 className="font-bold text-gray-900 text-sm">
+                  {pengurusFormEditId ? 'Edit Pengurus' : 'Tambah Pengurus Baru'} — {pengurusFormContext.groupName}
+                </h3>
+                <button onClick={() => { setShowPengurusForm(false); setPengurusFormEditId(null); }} className="text-slate-400 hover:text-slate-600 p-1">✕</button>
+              </div>
+              <div className="p-4 max-h-[80vh] overflow-y-auto">
+                <AdminCMSForm
+                  activeModel="pengurus"
+                  editItemId={pengurusFormEditId}
+                  rantings={rantings}
+                  userRole={userRole || 'guest'}
+                  onClose={() => { setShowPengurusForm(false); setPengurusFormEditId(null); }}
+                  onSubmit={handlePengurusFormSubmit}
+                  kaderList={kaderList}
+                  kegiatanList={kegiatanList}
+                  kasList={kasList}
+                  koinList={koinList}
+                  suratList={suratList}
+                  usahaList={usahaList}
+                  saranaIbadahList={saranaIbadahList}
+                  saranaPendidikanList={saranaPendidikanList}
+                  beritaList={beritaList}
+                  dokumentasiList={dokumentasiList}
+                  aspirasiList={aspirasiList}
+                  pengurusList={pengurusList}
+                  formContext={pengurusFormContext.groupType ? pengurusFormContext : undefined}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Form Tambah Kegiatan */}
+        {showKegiatanForm && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-2xl w-full border border-gray-200 shadow-xl overflow-hidden animate-scaleIn">
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <h3 className="font-bold text-gray-900 text-sm">
+                  Tambah Kegiatan Baru — {groupId}
+                </h3>
+                <button onClick={() => setShowKegiatanForm(false)} className="text-slate-400 hover:text-slate-600 p-1">✕</button>
+              </div>
+              <div className="p-4 max-h-[80vh] overflow-y-auto">
+                <AdminCMSForm
+                  activeModel="kegiatan"
+                  editItemId={null}
+                  rantings={rantings}
+                  userRole={userRole || 'guest'}
+                  onClose={() => setShowKegiatanForm(false)}
+                  onSubmit={handleKegiatanFormSubmit}
+                  kaderList={kaderList}
+                  kegiatanList={kegiatanList}
+                  kasList={kasList}
+                  koinList={koinList}
+                  suratList={suratList}
+                  usahaList={usahaList}
+                  saranaIbadahList={saranaIbadahList}
+                  saranaPendidikanList={saranaPendidikanList}
+                  beritaList={beritaList}
+                  dokumentasiList={dokumentasiList}
+                  aspirasiList={aspirasiList}
+                  pengurusList={pengurusList}
+                  formContext={{ organizer: kegiatanFormContext.organizer }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ==========================================
   // PAGE 1: PROFIL JAMIYAH
   // ==========================================
   const renderProfil = () => {
+    // Route: /profil/:rantingId/:type/:itemId  (e.g. /profil/mwc/banom/gp-ansor)
+    if (profileSubPath) {
+      const parts = profileSubPath.split('/');
+      const rantingId = parts[0] || '';
+      const groupType = parts[1] || ''; // 'banom' or 'lembaga'
+      const groupId = parts.slice(2).join('/') || '';
+
+      if (rantingId && groupType && groupId && (groupType === 'banom' || groupType === 'lembaga')) {
+        return renderBanomLembagaDetail(rantingId, groupType, groupId);
+      }
+    }
+
     // If a specific Ranting is selected, render the detailed Ranting profile
     if (selectedRantingProfileId) {
       const ranting = rantings.find(r => r.id === selectedRantingProfileId);
@@ -989,6 +1692,7 @@ export default function PortalPages({
       ];
 
       // Computations for Harian, Banoms, and Lembagas
+      const isAdmin = userRole && userRole !== 'guest';
       const rPengurusHarian = rPengurus.filter(p => p.groupType === 'Harian' || !p.groupType);
 
       // Build Banom list from ranting.activeBanom (source of truth) + pengurus members
@@ -1327,28 +2031,38 @@ export default function PortalPages({
             <div className="lg:col-span-2 space-y-6">
               {/* Profile Main Content Sections */}
               
-              {/* 1. Jajaran Pengurus */}
+              {/* 1. Jajaran Pengurus Harian */}
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-4">
                 <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-gray-900 text-sm">Jajaran Pengurus Harian</h3>
                     <p className="text-[10px] text-slate-400">Jajaran Syuriah (Rais) & Tanfidziyah (Ketua) resmi</p>
                   </div>
-                  <span className="text-[10px] font-bold bg-tosca-50 text-tosca-700 px-2 py-0.5 rounded border border-tosca-100">
-                    {rPengurusHarian.length} Jajaran
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-bold bg-tosca-50 text-tosca-700 px-2 py-0.5 rounded border border-tosca-100">
+                      {rPengurusHarian.length} Jajaran
+                    </span>
+                    {isAdmin && (
+                      <button
+                        onClick={() => openPengurusForm('Harian', '', ranting.id)}
+                        className="px-3 py-1.5 bg-tosca-600 hover:bg-tosca-700 text-white text-[10px] font-bold rounded-lg flex items-center space-x-1"
+                      >
+                        <Plus className="w-3 h-3" /><span>Tambah Pengurus</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {rPengurusHarian.map((p) => (
-                    <div key={p.id} className="bg-slate-50/70 p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all">
+                    <div key={p.id} className="bg-slate-50/70 p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all group relative">
                       <img 
                         src={p.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
                         alt={p.name} 
                         referrerPolicy="no-referrer"
                         className="w-12 h-12 rounded-xl object-contain border border-slate-200 bg-white shrink-0 shadow-xs" 
                       />
-                      <div className="space-y-1 overflow-hidden">
+                      <div className="space-y-1 overflow-hidden flex-1">
                         <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-tosca-100 text-tosca-800">
                           {p.role}
                         </span>
@@ -1371,176 +2085,188 @@ export default function PortalPages({
                           </div>
                         )}
                       </div>
+                      {isAdmin && (
+                        <button
+                          onClick={() => openPengurusForm('Harian', '', ranting.id, p.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-white text-slate-400 hover:text-tosca-600 absolute top-2 right-2"
+                          title="Edit Pengurus"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   ))}
 
                   {rPengurusHarian.length === 0 && (
                     <div className="col-span-full py-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
                       <p className="text-xs text-slate-500 font-bold">Data Pengurus Harian belum dimasukkan secara lengkap di sistem.</p>
+                      {isAdmin && <p className="text-[10px] text-tosca-600 mt-1 font-semibold">Klik \u201cTambah Pengurus\u201d untuk memulai.</p>}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* 2. Badan Otonom (Banom) NU */}
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="font-bold text-gray-900 text-sm">Badan Otonom (Banom) NU</h3>
-                  <p className="text-[10px] text-slate-400">Pilar perangkat organisasi berbasis usia, profesi, & kaderisasi internal</p>
-                </div>
+              {/* 2. Banom & Lembaga — hanya yang aktif (punya pengurus) */}
+              {(() => {
+                // Filter: hanya tampilkan Banom/Lembaga yang punya pengurus di ranting ini
+                const activeBanomIds = (ranting.activeBanom || []).filter(bId =>
+                  pengurusList.some(p => p.groupType === 'Banom' && p.groupName === bId && (ranting.id === 'mwc' ? true : p.rantingId === ranting.id))
+                );
+                const activeLembagaIds = (ranting.activeLembaga || []).filter(lId =>
+                  pengurusList.some(p => p.groupType === 'Lembaga' && p.groupName === lId && (ranting.id === 'mwc' ? true : p.rantingId === ranting.id))
+                );
+                const hasActive = activeBanomIds.length > 0 || activeLembagaIds.length > 0;
 
-                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 no-scrollbar">
-                  {activeBanomsWithMembers.map((banom) => (
-                    <div key={banom.id} className="bg-slate-50/70 p-4 rounded-xl border border-slate-150 hover:border-emerald-200 transition-all flex flex-col space-y-3">
-                      <div className="flex items-start justify-between border-b border-slate-150 pb-2">
-                        <div className="flex items-center space-x-2.5">
-                          <span className="w-8 h-8 rounded-lg flex items-center justify-center font-display text-[10.5px] font-extrabold bg-emerald-100 text-emerald-800 shrink-0">
-                            {banom.id.split(' ').map(w => w[0]).join('')}
-                          </span>
-                          <div>
-                            <h4 className="text-xs font-bold text-gray-900 leading-tight">{banom.id}</h4>
-                            <span className="text-[8px] text-slate-400 block font-semibold truncate max-w-[180px]">{banom.name}</span>
-                          </div>
-                        </div>
+                // Master definitions for "Tambah" dropdown
+                const allBanomIds = ['Muslimat NU', 'GP Ansor', 'Fatayat NU', 'IPNU', 'IPPNU', 'PMII', 'ISNU', 'JARTMAN', 'JQH', 'Pergunu', 'Sarbumusi', 'Pagar Nusa', 'Lesbumi'];
+                const allLembagaIds = ['LDNU', 'LPMNU', 'RMI-NU', 'LKKNU', 'LTMNU', 'LAZISNU', 'LKNU', 'LAKPESDAM', 'LPBHNU', 'LPNU', 'LP2NU', 'LBMNU', 'LESBUMI', 'LTNNU', 'LPBI-NU', 'LF-NU', 'LWPNU'];
 
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase shrink-0 bg-emerald-100 text-emerald-800">
-                          {banom.members.length} Pengurus
-                        </span>
+                const handleAddBanom = (banomId: string) => {
+                  if (!setRantings) return;
+                  // Add to ranting's activeBanom if not already there
+                  if (!(ranting.activeBanom || []).includes(banomId)) {
+                    setRantings(prev => prev.map(r => r.id === ranting.id ? { ...r, activeBanom: [...(r.activeBanom || []), banomId] } : r));
+                    if (isSupabaseConfigured) {
+                      const updated = { activeBanom: [...(ranting.activeBanom || []), banomId] };
+                      updateTableData('ranting', ranting.id, updated).catch(console.error);
+                    }
+                  }
+                  // Navigate to detail page
+                  setProfileSubPath?.(`${ranting.id}/banom/${banomId}`);
+                };
+
+                const handleAddLembaga = (lembagaId: string) => {
+                  if (!setRantings) return;
+                  if (!(ranting.activeLembaga || []).includes(lembagaId)) {
+                    setRantings(prev => prev.map(r => r.id === ranting.id ? { ...r, activeLembaga: [...(r.activeLembaga || []), lembagaId] } : r));
+                    if (isSupabaseConfigured) {
+                      const updated = { activeLembaga: [...(ranting.activeLembaga || []), lembagaId] };
+                      updateTableData('ranting', ranting.id, updated).catch(console.error);
+                    }
+                  }
+                  setProfileSubPath?.(`${ranting.id}/lembaga/${lembagaId}`);
+                };
+
+                return (
+                  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+                    <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-sm">Banom & Lembaga NU</h3>
+                        <p className="text-[10px] text-slate-400">Klik untuk melihat profil detail, struktur pengurus, kader, keuangan, dan galeri</p>
                       </div>
-                      <p className="text-[10px] text-slate-500 leading-relaxed font-light">{banom.desc}</p>
-                      
-                      <div className="space-y-1.5 pt-1">
-                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Pengurus Terdaftar:</span>
-                        {banom.members.length === 0 && (
-                          <p className="text-[10px] text-slate-400 italic py-1">Belum ada pengurus terdaftar untuk badan otonom ini.</p>
-                        )}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {banom.members.map((m) => (
-                            <div key={m.id} className="bg-white p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all shadow-xs">
-                              <img 
-                                src={m.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
-                                alt={m.name} 
-                                referrerPolicy="no-referrer"
-                                className="w-12 h-12 rounded-xl object-contain border border-slate-200 bg-slate-50 shrink-0 shadow-xs" 
-                              />
-                              <div className="space-y-1 overflow-hidden min-w-0 w-full">
-                                <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-100">
-                                  {m.role || 'Pengurus'}
-                                </span>
-                                <h4 className="text-xs font-bold text-gray-900 truncate leading-tight">{m.name}</h4>
-                                
-                                <div className="grid grid-cols-2 gap-x-2 pt-1.5 text-[9px] text-slate-500">
-                                  <div>
-                                    <span className="block text-slate-400 font-bold uppercase text-[7px]">Pendidikan</span>
-                                    <span className="font-semibold text-slate-700 truncate block">{m.education || '-'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="block text-slate-400 font-bold uppercase text-[7px]">Kaderisasi</span>
-                                    <span className="font-semibold text-slate-700 truncate block">{m.kaderisasiStatus || '-'}</span>
-                                  </div>
-                                </div>
-                                {m.phone && (
-                                  <div className="flex items-center space-x-1 text-slate-500 pt-1 text-[9px] font-mono">
-                                    <Phone className="w-3 h-3 text-tosca-600" />
-                                    <span>{m.phone}</span>
-                                  </div>
-                                )}
+                      {isAdmin && (
+                        <div className="flex items-center space-x-2">
+                          {/* Dropdown Tambah Banom */}
+                          <div className="relative group">
+                            <button className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg flex items-center space-x-1">
+                              <Plus className="w-3 h-3" /><span>Tambah Banom</span>
+                            </button>
+                            <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 w-56 hidden group-hover:block">
+                              <div className="p-2 max-h-64 overflow-y-auto space-y-0.5">
+                                {allBanomIds.map(bId => {
+                                  const alreadyActive = activeBanomIds.includes(bId);
+                                  return (
+                                    <button
+                                      key={bId}
+                                      onClick={() => handleAddBanom(bId)}
+                                      className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-semibold transition-all ${alreadyActive ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                                    >
+                                      {alreadyActive ? '✓ ' : ''}{bId}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {activeBanomsWithMembers.length === 0 && (
-                    <div className="py-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                      <p className="text-xs text-slate-500 font-bold">Belum ada Badan Otonom (Banom) yang memiliki data pengurus aktif terdaftar.</p>
-                      <p className="text-[10px] text-slate-400 mt-1">Gunakan dashboard Admin CMS untuk menambahkan pengurus Banom.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 3. Lembaga NU */}
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="font-bold text-gray-900 text-sm">Lembaga-Lembaga NU</h3>
-                  <p className="text-[10px] text-slate-400">Perangkat departementalisasi pelaksana program bidang keahlian khusus</p>
-                </div>
-
-                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 no-scrollbar">
-                  {activeLembagasWithMembers.map((lem) => (
-                    <div key={lem.id} className="bg-slate-50/70 p-4 rounded-xl border border-slate-150 hover:border-blue-200 transition-all flex flex-col space-y-3">
-                      <div className="flex items-start justify-between border-b border-slate-150 pb-2">
-                        <div className="flex items-center space-x-2.5">
-                          <span className="w-8 h-8 rounded-lg flex items-center justify-center font-display text-[10.5px] font-extrabold bg-blue-100 text-blue-800 shrink-0">
-                            {lem.id.split('-')[0]}
-                          </span>
-                          <div>
-                            <h4 className="text-xs font-bold text-gray-900 leading-tight">{lem.id}</h4>
-                            <span className="text-[8px] text-slate-400 block font-semibold truncate max-w-[180px]">{lem.name}</span>
                           </div>
-                        </div>
 
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase shrink-0 bg-blue-100 text-blue-800">
-                          {lem.members.length} Pengurus
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-550 leading-relaxed font-light">{lem.desc}</p>
-
-                      <div className="space-y-1.5 pt-1">
-                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider">Pengurus Terdaftar:</span>
-                        {lem.members.length === 0 && (
-                          <p className="text-[10px] text-slate-400 italic py-1">Belum ada pengurus terdaftar untuk lembaga ini.</p>
-                        )}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {lem.members.map((m) => (
-                            <div key={m.id} className="bg-white p-4 rounded-xl border border-slate-150 flex items-start space-x-3.5 hover:border-tosca-200 transition-all shadow-xs">
-                              <img 
-                                src={m.photoUrl || 'https://res.cloudinary.com/dkirp8utp/image/upload/v1783494610/PRNU_BUNGAH_kif8y5.png'} 
-                                alt={m.name} 
-                                referrerPolicy="no-referrer"
-                                className="w-12 h-12 rounded-xl object-contain border border-slate-200 bg-slate-50 shrink-0 shadow-xs" 
-                              />
-                              <div className="space-y-1 overflow-hidden min-w-0 w-full">
-                                <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-100">
-                                  {m.role || 'Pengurus'}
-                                </span>
-                                <h4 className="text-xs font-bold text-gray-900 truncate leading-tight">{m.name}</h4>
-                                
-                                <div className="grid grid-cols-2 gap-x-2 pt-1.5 text-[9px] text-slate-500">
-                                  <div>
-                                    <span className="block text-slate-400 font-bold uppercase text-[7px]">Pendidikan</span>
-                                    <span className="font-semibold text-slate-700 truncate block">{m.education || '-'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="block text-slate-400 font-bold uppercase text-[7px]">Kaderisasi</span>
-                                    <span className="font-semibold text-slate-700 truncate block">{m.kaderisasiStatus || '-'}</span>
-                                  </div>
-                                </div>
-                                {m.phone && (
-                                  <div className="flex items-center space-x-1 text-slate-500 pt-1 text-[9px] font-mono">
-                                    <Phone className="w-3 h-3 text-tosca-600" />
-                                    <span>{m.phone}</span>
-                                  </div>
-                                )}
+                          {/* Dropdown Tambah Lembaga */}
+                          <div className="relative group">
+                            <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg flex items-center space-x-1">
+                              <Plus className="w-3 h-3" /><span>Tambah Lembaga</span>
+                            </button>
+                            <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 w-56 hidden group-hover:block">
+                              <div className="p-2 max-h-64 overflow-y-auto space-y-0.5">
+                                {allLembagaIds.map(lId => {
+                                  const alreadyActive = activeLembagaIds.includes(lId);
+                                  return (
+                                    <button
+                                      key={lId}
+                                      onClick={() => handleAddLembaga(lId)}
+                                      className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-semibold transition-all ${alreadyActive ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                                    >
+                                      {alreadyActive ? '✓ ' : ''}{lId}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
-                          ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Active Banom (punya pengurus) */}
+                    {activeBanomIds.length > 0 && (
+                      <div>
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block mb-2">Badan Otonom (Banom) — Aktif</span>
+                        <div className="flex flex-wrap gap-2">
+                          {activeBanomIds.map((banomId) => {
+                            const count = pengurusList.filter(p => p.groupType === 'Banom' && p.groupName === banomId && (ranting.id === 'mwc' ? true : p.rantingId === ranting.id)).length;
+                            return (
+                              <button
+                                key={banomId}
+                                onClick={() => setProfileSubPath?.(`${ranting.id}/banom/${banomId}`)}
+                                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 hover:border-emerald-300 rounded-xl text-[11px] font-bold text-emerald-800 transition-all flex items-center space-x-1.5"
+                              >
+                                <span className="w-5 h-5 rounded bg-emerald-200 text-emerald-800 flex items-center justify-center text-[8px] font-extrabold shrink-0">
+                                  {banomId.split(' ').map((w: string) => w[0]).join('').slice(0, 2)}
+                                </span>
+                                <span>{banomId}</span>
+                                <span className="text-[9px] text-emerald-600 font-normal">({count})</span>
+                                <ChevronRight className="w-3 h-3 text-emerald-400" />
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )}
 
-                  {activeLembagasWithMembers.length === 0 && (
-                    <div className="py-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                      <p className="text-xs text-slate-500 font-bold">Belum ada Lembaga-Lembaga NU yang memiliki data pengurus aktif terdaftar.</p>
-                      <p className="text-[10px] text-slate-400 mt-1">Gunakan dashboard Admin CMS untuk menambahkan pengurus Lembaga.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                    {/* Active Lembaga (punya pengurus) */}
+                    {activeLembagaIds.length > 0 && (
+                      <div>
+                        <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block mb-2">Lembaga — Aktif</span>
+                        <div className="flex flex-wrap gap-2">
+                          {activeLembagaIds.map((lemId) => {
+                            const count = pengurusList.filter(p => p.groupType === 'Lembaga' && p.groupName === lemId && (ranting.id === 'mwc' ? true : p.rantingId === ranting.id)).length;
+                            return (
+                              <button
+                                key={lemId}
+                                onClick={() => setProfileSubPath?.(`${ranting.id}/lembaga/${lemId}`)}
+                                className="px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 rounded-xl text-[11px] font-bold text-blue-800 transition-all flex items-center space-x-1.5"
+                              >
+                                <span className="w-5 h-5 rounded bg-blue-200 text-blue-800 flex items-center justify-center text-[8px] font-extrabold shrink-0">
+                                  {lemId.split('-')[0].slice(0, 2)}
+                                </span>
+                                <span>{lemId}</span>
+                                <span className="text-[9px] text-blue-600 font-normal">({count})</span>
+                                <ChevronRight className="w-3 h-3 text-blue-400" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Empty state */}
+                    {!hasActive && (
+                      <div className="py-6 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                        <p className="text-xs text-slate-500 font-bold">Belum ada Banom atau Lembaga yang aktif (belum ada pengurus terdaftar).</p>
+                        {isAdmin && <p className="text-[10px] text-tosca-600 mt-1 font-semibold">Klik \u201cTambah Banom\u201d atau \u201cTambah Lembaga\u201d, lalu masukkan minimal Ketua & Sekretaris.</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -1990,7 +2716,10 @@ export default function PortalPages({
             return (
               <div 
                 key={r.id} 
-                onClick={() => setSelectedRantingProfileId(r.id)}
+                onClick={() => {
+                  setSelectedRantingProfileId(r.id);
+                  setProfileSubPath?.(r.id);
+                }}
                 className="group cursor-pointer bg-white rounded-2xl border border-gray-200 shadow-xs hover:border-tosca-400 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
               >
                 {/* Visual Header */}
@@ -2047,6 +2776,7 @@ export default function PortalPages({
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedRantingProfileId(r.id);
+                      setProfileSubPath?.(r.id);
                     }}
                     className="text-xs font-semibold text-tosca-700 hover:text-tosca-800 transition-colors flex items-center space-x-1"
                   >
